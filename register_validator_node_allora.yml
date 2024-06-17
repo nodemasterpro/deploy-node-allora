@@ -1,0 +1,44 @@
+---
+- name: Register Allora Validator Node
+  hosts: localhost
+  become: true
+
+  vars_prompt:
+    - name: wallet_name
+      prompt: "Enter your wallet name"
+      private: false
+    - name: moniker
+      prompt: "Enter your node name"
+      private: false
+
+  tasks:
+    - name: Get wallet address
+      command: allorad keys show {{ wallet_name }} -a --keyring-backend test
+      register: wallet_address
+
+    - name: Create stake-validator.json
+      copy:
+        dest: "{{ ansible_env.HOME }}/allora-chain/stake-validator.json"
+        content: |
+          {
+              "pubkey": "$(allorad --home={{ ansible_env.HOME }}/.allorad comet show-validator)",
+              "amount": "1000000uallo",
+              "moniker": "{{ moniker }}",
+              "commission-rate": "0.1",
+              "commission-max-rate": "0.2",
+              "commission-max-change-rate": "0.01",
+              "min-self-delegation": "1"
+          }
+
+    - name: Stake as Validator
+      shell: |
+        allorad tx staking create-validator {{ ansible_env.HOME }}/allora-chain/stake-validator.json \
+            --chain-id=testnet \
+            --home={{ ansible_env.HOME }}/.allorad \
+            --keyring-backend=test \
+            --from={{ wallet_name }}
+      register: validator_creation
+
+    - name: Display validator creation output
+      debug:
+        msg: "{{ validator_creation.stdout }}"

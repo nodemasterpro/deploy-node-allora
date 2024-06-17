@@ -1,0 +1,76 @@
+---
+- name: Deploy Allora Validator Node using Docker and systemd
+  hosts: localhost
+  become: true
+
+  vars_prompt:
+    - name: moniker
+      prompt: "Enter your node name"
+      private: false
+
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: 'yes'
+
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - git
+          - jq
+          - build-essential
+          - gcc
+        state: present
+
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_version
+      failed_when: docker_version.rc != 0
+      ignore_errors: yes
+
+    - name: Install Docker if not present
+      apt:
+        name: docker.io
+        state: present
+      when: docker_version.failed
+
+    - name: Ensure Docker service is running
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Install Docker Compose plugin
+      shell: |
+        curl -SL https://github.com/docker/compose/releases/download/v2.3.3/docker-compose-linux-x86_64 -o /usr/bin/docker-compose
+        chmod +x /usr/bin/docker-compose
+
+    - name: Check Docker Compose installation
+      command: docker-compose version
+      register: docker_compose_check
+      failed_when: docker_compose_check.rc != 0
+
+    - name: Clone Allora Chain repository
+      git:
+        repo: 'https://github.com/allora-network/allora-chain.git'
+        dest: "{{ ansible_env.HOME }}/allora-chain"
+        version: "main"
+
+    - name: Create systemd service file from template
+      template:
+        src: templates/allora-node.service.j2
+        dest: /etc/systemd/system/allora-node.service
+      vars:
+        moniker: "{{ moniker }}"
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: true
+
+    - name: Enable and start Docker Compose service for Allora Node
+      systemd:
+        name: allora-node
+        enabled: true
+        state: started

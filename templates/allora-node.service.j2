@@ -1,0 +1,13 @@
+[Unit]
+Description=Allora Node Service
+After=network.target
+
+[Service]
+Restart=always
+WorkingDirectory=/root/allora-chain
+ExecStart=/usr/bin/docker-compose -f /root/allora-chain/docker-compose.yaml up
+ExecStop=/usr/bin/docker-compose -f /root/allora-chain/docker-compose.yaml down
+User=root
+
+[Install]
+WantedBy=multi-user.target

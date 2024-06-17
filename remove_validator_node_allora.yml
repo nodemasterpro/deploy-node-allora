@@ -1,0 +1,68 @@
+---
+- name: Remove Allora Validator Node
+  hosts: localhost
+  become: true
+
+  tasks:
+    - name: Stop Allora Validator Node service
+      ansible.builtin.systemd:
+        name: allora-node
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Kill any remaining Allora Validator Node processes
+      ansible.builtin.shell: |
+        pkill -f allorad
+      ignore_errors: true
+
+    - name: Wait for any remaining processes to terminate
+      ansible.builtin.wait_for:
+        timeout: 30
+
+    - name: Remove Allora Validator Node service file
+      ansible.builtin.file:
+        path: /etc/systemd/system/allora-node.service
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Allora Validator Node state directory
+      ansible.builtin.shell: |
+        rm -rf /run/systemd/system/allora-node.service
+        rm -rf /etc/systemd/system/allora-node.service
+      ignore_errors: true
+
+    - name: Remove Allora Validator Node data directory
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.allorad"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Allora Chain repository
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/allora-chain"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Go binary
+      ansible.builtin.file:
+        path: /usr/local/go
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Go bin from PATH in .bash_profile
+      ansible.builtin.lineinfile:
+        path: ~/.bash_profile
+        regexp: 'export PATH=\$PATH:/usr/local/go/bin:/root/.local/bin'
+        state: absent
+      ignore_errors: true
+
+    - name: Reload systemd to apply changes
+      ansible.builtin.shell: |
+        systemctl daemon-reload
+        systemctl reset-failed
+      ignore_errors: true
+
+    - name: Display message
+      ansible.builtin.debug:
+        msg: "Allora Validator Node has been removed successfully."
