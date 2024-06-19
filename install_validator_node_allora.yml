@@ -1,12 +1,23 @@
 ---
-- name: Deploy Allora Validator Node using Docker and systemd
+- name: Deploy Allora Validator Node using Ansible
   hosts: localhost
   become: true
 
   vars_prompt:
-    - name: moniker
+    - name: node_moniker
       prompt: "Enter your node name"
       private: false
+
+  vars:
+    NETWORK: edgenet
+    GENESIS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/genesis.json"
+    SEEDS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/seeds.txt"
+    APP_HOME: "/root/.allorad"
+    INIT_FLAG: "{{ APP_HOME }}/.initialized"
+    KEYRING_BACKEND: test
+    GENESIS_FILE: "{{ APP_HOME }}/config/genesis.json"
+    DENOM: uallo
+    SEEDS_FILE: "/tmp/seeds.txt"
 
   tasks:
     - name: Update and upgrade apt packages
@@ -24,33 +35,57 @@
           - gcc
         state: present
 
-    - name: Check if Docker is installed
-      command: docker --version
-      register: docker_version
-      failed_when: docker_version.rc != 0
-      ignore_errors: yes
-
-    - name: Install Docker if not present
-      apt:
-        name: docker.io
-        state: present
-      when: docker_version.failed
-
-    - name: Ensure Docker service is running
-      systemd:
-        name: docker
-        state: started
-        enabled: true
-
-    - name: Install Docker Compose plugin
+    - name: Install Go
       shell: |
-        curl -SL https://github.com/docker/compose/releases/download/v2.3.3/docker-compose-linux-x86_64 -o /usr/bin/docker-compose
-        chmod +x /usr/bin/docker-compose
+        curl -OL https://golang.org/dl/go1.22.4.linux-amd64.tar.gz
+        sudo tar -C /usr/local -xvf go1.22.4.linux-amd64.tar.gz
+      environment:
+        PATH: "/usr/local/go/bin:{{ ansible_env.PATH }}"
 
-    - name: Check Docker Compose installation
-      command: docker-compose version
-      register: docker_compose_check
-      failed_when: docker_compose_check.rc != 0
+    - name: Add Go to PATH
+      lineinfile:
+        path: ~/.profile
+        line: 'export PATH=$PATH:/usr/local/go/bin'
+        create: yes
+
+    - name: Add GOPATH to PATH
+      shell: |
+        echo 'export PATH=$PATH:$(go env GOPATH)/bin' >> ~/.profile
+      args:
+        executable: /bin/bash
+
+    - name: Source profile for Go
+      shell: |
+        source ~/.profile
+      args:
+        executable: /bin/bash
+
+    - name: Run install script for allorad
+      shell: |
+        curl -sSL https://raw.githubusercontent.com/allora-network/allora-chain/main/install.sh | bash -s -- v0.0.8
+      args:
+        executable: /bin/bash
+
+    - name: Add allorad to PATH
+      lineinfile:
+        path: ~/.profile
+        line: 'export PATH=$PATH=/root/.local/bin'
+        create: yes
+
+    - name: Source profile for allorad
+      shell: |
+        source ~/.profile
+      args:
+        executable: /bin/bash
+
+    - name: Verify allorad binary in PATH
+      shell: |
+        source ~/.profile
+        which allorad
+      args:
+        executable: /bin/bash
+      register: allorad_check
+      failed_when: allorad_check.rc != 0
 
     - name: Clone Allora Chain repository
       git:
@@ -58,19 +93,122 @@
         dest: "{{ ansible_env.HOME }}/allora-chain"
         version: "main"
 
+    - name: Run make install
+      shell: |
+        cd {{ ansible_env.HOME }}/allora-chain
+        make install
+      args:
+        executable: /bin/bash
+
+    - name: Ensure APP_HOME directory exists
+      file:
+        path: "{{ APP_HOME }}"
+        state: directory
+
+    - name: Remove existing configuration if not initialized
+      shell: rm -rf {{ APP_HOME }}/config
+      when: not (INIT_FLAG | bool)
+
+    - name: Initialize the node
+      shell: allorad --home {{ APP_HOME }} init {{ node_moniker }} --chain-id {{ NETWORK }} --default-denom {{ DENOM }}
+      when: not (INIT_FLAG | bool)
+
+    - name: Download genesis file
+      get_url:
+        url: "{{ GENESIS_URL }}"
+        dest: "{{ GENESIS_FILE }}"
+      when: not (INIT_FLAG | bool)
+
+    - name: Check if the allorad key already exists
+      shell: allorad --home {{ APP_HOME }} keys show {{ node_moniker }} --keyring-backend {{ KEYRING_BACKEND }}
+      register: key_check
+      ignore_errors: true
+
+    - name: Create new allorad account
+      shell: allorad --home {{ APP_HOME }} keys add {{ node_moniker }} --keyring-backend {{ KEYRING_BACKEND }}
+      register: account_info
+      when: key_check.rc != 0 and not (INIT_FLAG | bool)
+
+    - name: Save account info
+      copy:
+        content: "{{ account_info.stdout }}"
+        dest: "{{ APP_HOME }}/{{ node_moniker }}.account_info"
+      when: key_check.rc != 0 and not (INIT_FLAG | bool)
+
+    - name: Configure allorad client
+      shell: allorad --home={{ APP_HOME }} config set client chain-id {{ NETWORK }}
+      when: not (INIT_FLAG | bool)
+
+    - name: Set keyring-backend for allorad client
+      shell: allorad --home={{ APP_HOME }} config set client keyring-backend {{ KEYRING_BACKEND }}
+      when: not (INIT_FLAG | bool)
+
+    - name: Create symlink for allorad config
+      file:
+        src: "{{ APP_HOME }}"
+        dest: "{{ APP_HOME }}/.allorad"
+        state: link
+      when: not (INIT_FLAG | bool)
+
+    - name: Create init flag
+      file:
+        path: "{{ INIT_FLAG }}"
+        state: touch
+      when: not (INIT_FLAG | bool)
+
+    - name: Retrieve the latest Allora snapshot URL
+      ansible.builtin.uri:
+        url: "https://www.polkachu.com/testnets/allora/snapshots"
+        return_content: yes
+      register: webpage_content
+
+    - name: Parse the snapshot URL
+      ansible.builtin.set_fact:
+        snapshot_url: "{{ webpage_content.content | regex_search('https://snapshots.polkachu.com/testnet-snapshots/allora/allora_[0-9]+\\.tar\\.lz4') }}"
+
+    - name: Download the snapshot with curl and show progress
+      ansible.builtin.command:
+        cmd: "curl -L {{ snapshot_url }} -o {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 --progress-bar"
+      args:
+        executable: /bin/bash
+      register: curl_result
+      failed_when: curl_result.rc != 0
+
+    - name: Extract the snapshot
+      ansible.builtin.shell:
+        cmd: "lz4 -d {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 | tar x -C {{ ansible_env.HOME }}/.allorad"
+        executable: /bin/bash
+
+    - name: Download seeds file
+      get_url:
+        url: "{{ SEEDS_URL }}"
+        dest: "{{ SEEDS_FILE }}"
+
+    - name: Read seeds from file
+      slurp:
+        src: "{{ SEEDS_FILE }}"
+      register: seeds_content
+
+    - name: Decode seeds content
+      set_fact:
+        seeds: "{{ seeds_content.content | b64decode }}"
+
     - name: Create systemd service file from template
       template:
         src: templates/allora-node.service.j2
         dest: /etc/systemd/system/allora-node.service
       vars:
-        moniker: "{{ moniker }}"
+        app_home: "{{ APP_HOME }}"
+        moniker: "{{ node_moniker }}"
+        denom: "{{ DENOM }}"
+        seeds: "{{ seeds }}"
 
     - name: Reload systemd daemon
       systemd:
         daemon_reload: true
 
-    - name: Enable and start Docker Compose service for Allora Node
+    - name: Enable and start Allora Node service
       systemd:
         name: allora-node
         enabled: true
-        state: started
+        state: stopped

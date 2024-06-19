@@ -34,13 +34,13 @@
 
     - name: Remove Allora Validator Node data directory
       ansible.builtin.file:
-        path: "{{ ansible_env.HOME }}/.allorad"
+        path: "/root/.allorad"
         state: absent
       ignore_errors: true
 
     - name: Remove Allora Chain repository
       ansible.builtin.file:
-        path: "{{ ansible_env.HOME }}/allora-chain"
+        path: "/root/allora-chain"
         state: absent
       ignore_errors: true
 
@@ -50,10 +50,17 @@
         state: absent
       ignore_errors: true
 
-    - name: Remove Go bin from PATH in .bash_profile
-      ansible.builtin.lineinfile:
-        path: ~/.bash_profile
-        regexp: 'export PATH=\$PATH:/usr/local/go/bin:/root/.local/bin'
+    - name: Remove Go bin from PATH in .profile
+      lineinfile:
+        path: ~/.profile
+        regexp: 'export PATH=\$PATH:/usr/local/go/bin'
+        state: absent
+      ignore_errors: true
+
+    - name: Remove allora bin from PATH in .profile
+      lineinfile:
+        path: ~/.profile
+        regexp: 'export PATH=\$PATH=/root/.local/bin'
         state: absent
       ignore_errors: true
 

@@ -4,9 +4,7 @@ After=network.target
 
 [Service]
 Restart=always
-WorkingDirectory=/root/allora-chain
-ExecStart=/usr/bin/docker-compose -f /root/allora-chain/docker-compose.yaml up
-ExecStop=/usr/bin/docker-compose -f /root/allora-chain/docker-compose.yaml down
+ExecStart=/root/go/bin/allorad --home={{ app_home }} start --moniker={{ moniker }} --minimum-gas-prices=0{{ denom }} --rpc.laddr=tcp://0.0.0.0:26657 --p2p.seeds={{ seeds }} --log_level "*:error,state:info,server:info,rewards:debug,inference_synthesis:debug,topic_handler:debug"
 User=root
 
 [Install]

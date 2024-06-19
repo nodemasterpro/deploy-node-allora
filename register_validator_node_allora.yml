@@ -11,17 +11,18 @@
       prompt: "Enter your node name"
       private: false
 
+    
   tasks:
-    - name: Get wallet address
-      command: allorad keys show {{ wallet_name }} -a --keyring-backend test
-      register: wallet_address
+    - name: Get validator public key
+      shell: allorad --home={{ ansible_env.HOME }}/allora-chain/data comet show-validator
+      register: validator_pubkey
 
     - name: Create stake-validator.json
       copy:
         dest: "{{ ansible_env.HOME }}/allora-chain/stake-validator.json"
         content: |
           {
-              "pubkey": "$(allorad --home={{ ansible_env.HOME }}/.allorad comet show-validator)",
+              "pubkey": {{validator_pubkey.stdout}},
               "amount": "1000000uallo",
               "moniker": "{{ moniker }}",
               "commission-rate": "0.1",
@@ -34,7 +35,7 @@
       shell: |
         allorad tx staking create-validator {{ ansible_env.HOME }}/allora-chain/stake-validator.json \
             --chain-id=testnet \
-            --home={{ ansible_env.HOME }}/.allorad \
+            --home={{ ansible_env.HOME }}/allora-chain/data \
             --keyring-backend=test \
             --from={{ wallet_name }}
       register: validator_creation
@@ -42,3 +43,14 @@
     - name: Display validator creation output
       debug:
         msg: "{{ validator_creation.stdout }}"
+
+    - name: Get validator information
+      shell: |
+        VAL_PUBKEY=$(allorad --home={{ ansible_env.HOME }}/allora-chain/data comet show-validator | jq -r .key)
+        allorad --home={{ ansible_env.HOME }}/allora-chain/data q staking validators -o=json | \
+        jq '.validators[] | select(.consensus_pubkey.value=="'$VAL_PUBKEY'")'
+      register: validator_info
+
+    - name: Display validator information
+      debug:
+        msg: "{{ validator_info.stdout }}"
