@@ -9,7 +9,7 @@
       private: false
 
   vars:
-    NETWORK: edgenet
+    NETWORK: testnet
     GENESIS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/genesis.json"
     SEEDS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/seeds.txt"
     APP_HOME: "/root/.allorad"
@@ -60,38 +60,11 @@
       args:
         executable: /bin/bash
 
-    - name: Run install script for allorad
-      shell: |
-        curl -sSL https://raw.githubusercontent.com/allora-network/allora-chain/main/install.sh | bash -s -- v0.0.8
-      args:
-        executable: /bin/bash
-
-    - name: Add allorad to PATH
-      lineinfile:
-        path: ~/.profile
-        line: 'export PATH=$PATH=/root/.local/bin'
-        create: yes
-
-    - name: Source profile for allorad
-      shell: |
-        source ~/.profile
-      args:
-        executable: /bin/bash
-
-    - name: Verify allorad binary in PATH
-      shell: |
-        source ~/.profile
-        which allorad
-      args:
-        executable: /bin/bash
-      register: allorad_check
-      failed_when: allorad_check.rc != 0
-
     - name: Clone Allora Chain repository
       git:
         repo: 'https://github.com/allora-network/allora-chain.git'
         dest: "{{ ansible_env.HOME }}/allora-chain"
-        version: "main"
+        version: "tags/v0.0.10"
 
     - name: Run make install
       shell: |
@@ -119,21 +92,16 @@
         dest: "{{ GENESIS_FILE }}"
       when: not (INIT_FLAG | bool)
 
-    - name: Check if the allorad key already exists
-      shell: allorad --home {{ APP_HOME }} keys show {{ node_moniker }} --keyring-backend {{ KEYRING_BACKEND }}
-      register: key_check
-      ignore_errors: true
-
     - name: Create new allorad account
       shell: allorad --home {{ APP_HOME }} keys add {{ node_moniker }} --keyring-backend {{ KEYRING_BACKEND }}
       register: account_info
-      when: key_check.rc != 0 and not (INIT_FLAG | bool)
+      when: not (INIT_FLAG | bool)
 
     - name: Save account info
       copy:
         content: "{{ account_info.stdout }}"
         dest: "{{ APP_HOME }}/{{ node_moniker }}.account_info"
-      when: key_check.rc != 0 and not (INIT_FLAG | bool)
+      when: not (INIT_FLAG | bool)
 
     - name: Configure allorad client
       shell: allorad --home={{ APP_HOME }} config set client chain-id {{ NETWORK }}
@@ -156,29 +124,6 @@
         state: touch
       when: not (INIT_FLAG | bool)
 
-    - name: Retrieve the latest Allora snapshot URL
-      ansible.builtin.uri:
-        url: "https://www.polkachu.com/testnets/allora/snapshots"
-        return_content: yes
-      register: webpage_content
-
-    - name: Parse the snapshot URL
-      ansible.builtin.set_fact:
-        snapshot_url: "{{ webpage_content.content | regex_search('https://snapshots.polkachu.com/testnet-snapshots/allora/allora_[0-9]+\\.tar\\.lz4') }}"
-
-    - name: Download the snapshot with curl and show progress
-      ansible.builtin.command:
-        cmd: "curl -L {{ snapshot_url }} -o {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 --progress-bar"
-      args:
-        executable: /bin/bash
-      register: curl_result
-      failed_when: curl_result.rc != 0
-
-    - name: Extract the snapshot
-      ansible.builtin.shell:
-        cmd: "lz4 -d {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 | tar x -C {{ ansible_env.HOME }}/.allorad"
-        executable: /bin/bash
-
     - name: Download seeds file
       get_url:
         url: "{{ SEEDS_URL }}"
@@ -192,6 +137,23 @@
     - name: Decode seeds content
       set_fact:
         seeds: "{{ seeds_content.content | b64decode }}"
+
+    - name: Configure pruning to save storage
+      ansible.builtin.shell: |
+        sed -i \
+            -e "s/^pruning *=.*/pruning = \"custom\"/" \
+            -e "s/^pruning-keep-recent *=.*/pruning-keep-recent = \"100\"/" \
+            -e "s/^pruning-keep-every *=.*/pruning-keep-every = \"0\"/" \
+            -e "s/^pruning-interval *=.*/pruning-interval = \"10\"/" \
+            "{{ APP_HOME }}/config/app.toml"
+      args:
+        executable: /bin/bash
+
+    - name: Configure indexer to null
+      ansible.builtin.shell: |
+        sed -i "s/^indexer *=.*/indexer = \"null\"/" {{ APP_HOME }}/config/config.toml
+      args:
+        executable: /bin/bash
 
     - name: Create systemd service file from template
       template:
@@ -211,4 +173,55 @@
       systemd:
         name: allora-node
         enabled: true
-        state: stopped
+        state: started
+
+    - name: Retrieve the latest allora snapshot URL
+      ansible.builtin.uri:
+        url: "https://www.polkachu.com/testnets/allora/snapshots"
+        return_content: yes
+      register: webpage_content
+
+    - name: Parse the snapshot URL
+      ansible.builtin.set_fact:
+        snapshot_url: "{{ webpage_content.content | regex_search('https://snapshots.polkachu.com/testnet-snapshots/allora/allora_[0-9]+\\.tar\\.lz4') }}"
+
+    - name: Download the snapshot with curl and show progress
+      ansible.builtin.command:
+        cmd: "curl -L {{ snapshot_url }} -o {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 --progress-bar"
+      args:
+        executable: /bin/bash
+      register: curl_result
+      failed_when: curl_result.rc != 0
+
+    - name: Stop Allora Validator Node service
+      ansible.builtin.systemd:
+        name: allora-node
+        state: stopped    
+
+    - name: Backup priv_validator_state.json
+      ansible.builtin.shell: |
+        cp {{ APP_HOME }}/data/priv_validator_state.json {{ APP_HOME }}/priv_validator_state.json.backup
+      args:
+        executable: /bin/bash
+
+    - name: Reset tendermint state
+      ansible.builtin.shell: |
+        allorad tendermint unsafe-reset-all --home {{ APP_HOME }} --keep-addr-book
+      args:
+        executable: /bin/bash
+
+    - name: Extract the snapshot
+      ansible.builtin.shell:
+        cmd: "lz4 -d {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 | tar x -C {{ ansible_env.HOME }}/.allorad"
+        executable: /bin/bash
+
+    - name: Restore priv_validator_state.json
+      ansible.builtin.shell: |
+        mv {{ APP_HOME }}/priv_validator_state.json.backup {{ APP_HOME }}/data/priv_validator_state.json
+      args:
+        executable: /bin/bash
+
+    - name: Start Allora Validator Node service
+      ansible.builtin.systemd:
+        name: allora-node
+        state: started
