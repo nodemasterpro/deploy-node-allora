@@ -37,7 +37,7 @@
             --chain-id=testnet \
             --home={{ ansible_env.HOME }}/.allorad \
             --keyring-backend=test \
-            --from={{ wallet_name }}
+            --from={{ wallet_name }} \
             --yes 
       register: validator_creation
 
