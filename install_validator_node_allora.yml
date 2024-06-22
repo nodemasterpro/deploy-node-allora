@@ -66,21 +66,23 @@
         dest: "{{ ansible_env.HOME }}/allora-chain"
         version: "tags/v0.0.10"
 
-    - name: Verify Git Tag
+    - name: Force Clean Build Environment
       shell: |
         cd {{ ansible_env.HOME }}/allora-chain
-        git tag -l --contains HEAD
-      register: git_tag
-    - debug:
-        msg: "Checked out Git Tag: {{ git_tag.stdout }}"
-
-    - name: Run make install
-      shell: |
-        cd {{ ansible_env.HOME }}/allora-chain
+        make clean || true
+        git reset --hard
+        git clean -fdx
+        git checkout tags/v0.0.10
         make install
       args:
         executable: /bin/bash
 
+    - name: Verify installed version of allorad
+      shell: allorad version
+      register: allorad_version
+    - debug:
+        msg: "Installed allorad version: {{ allorad_version.stdout }}"
+        
     - name: Ensure APP_HOME directory exists
       file:
         path: "{{ APP_HOME }}"
