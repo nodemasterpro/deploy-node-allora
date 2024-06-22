@@ -17,9 +17,10 @@ Update your system's package list and install necessary tools:
 
 ```
 sudo apt update && sudo apt upgrade -y
+```
+```
 sudo apt install ansible git -y
 ```
-
 ## Step 2: Downloading the Project
 Clone this repository to access the Ansible playbook and all necessary files:
 
@@ -32,16 +33,13 @@ cd deploy-node-allora
 ## Step 3: Installing Allora Validator Node
 Execute the playbook using the following command, specifying the 'moniker' (node name) as an extra variable:
 
-
 ```
 ansible-playbook install_validator_node_allora.yml -e node_moniker="your_node_name"
 ```
-
 Note: Replace "your_node_name" with the unique name you wish to assign to your node.
 
 ## Step 4: Viewing Node Logs
 To view the logs for the Allora validator node:
-
 
 ```
 journalctl -u allora-node -f -o cat
@@ -49,7 +47,6 @@ journalctl -u allora-node -f -o cat
 
 ## Step 5: Creating a Wallet
 After installing the node, create a wallet essential for network operations:
-
 
 ```
 allorad keys add your_wallet_name --keyring-backend test
@@ -61,7 +58,6 @@ Get funds for your wallet via the Allora faucet. Enter the address of your walle
 ## Step 7: Node Synchronization Verification
 Ensure your node is fully synchronized with the Allora blockchain:
 
-
 ```
 allorad status | jq .result.sync_info
 ```
@@ -69,7 +65,6 @@ Wait until the catching_up variable is false. Synchronization time may vary.
 
 ## Step 8: Creating the Validator and Linking it with the Wallet
 To finalize the setup of your node, create a validator:
-
 
 ```
 ansible-playbook register_validator_node_allora.yml
@@ -85,7 +80,6 @@ Check the status of your node:
 ```
 allorad q staking validator <validator_address>
 ```
-
 ## Additional Information
 Stopping Service
 To stop the Allora validator node:
@@ -110,3 +104,9 @@ Ensure to back up all important data before deleting the Allora node, as this ac
 By following this guide, you have successfully deployed and managed Allora validator nodes, contributing to the robustness of the network and potentially earning rewards. Join the Allora community on Discord and Twitter to stay informed about the project.
 
 Thank you for taking the time to read this guide. If you have any questions or would like to continue the conversation, feel free to join the Allora Discord server. Stay updated and connected: Follow us on Twitter, join our Telegram group, Discord server, and subscribe to our YouTube channel.
+
+
+
+
+
+

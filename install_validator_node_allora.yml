@@ -8,6 +8,7 @@
       prompt: "Enter your node name"
       private: false
 
+
   vars:
     NETWORK: testnet
     GENESIS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/genesis.json"
@@ -90,17 +91,6 @@
       get_url:
         url: "{{ GENESIS_URL }}"
         dest: "{{ GENESIS_FILE }}"
-      when: not (INIT_FLAG | bool)
-
-    - name: Create new allorad account
-      shell: allorad --home {{ APP_HOME }} keys add {{ node_moniker }} --keyring-backend {{ KEYRING_BACKEND }}
-      register: account_info
-      when: not (INIT_FLAG | bool)
-
-    - name: Save account info
-      copy:
-        content: "{{ account_info.stdout }}"
-        dest: "{{ APP_HOME }}/{{ node_moniker }}.account_info"
       when: not (INIT_FLAG | bool)
 
     - name: Configure allorad client

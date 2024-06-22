@@ -1,0 +1,26 @@
+---
+- name: Create Wallet for 0G Validator Node
+  hosts: localhost
+  become: true
+
+  vars_prompt:
+    - name: wallet_name
+      prompt: "Enter your wallet name"
+      private: false
+
+  tasks:
+    - name: Ensure wallet directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.allorad/wallets"
+        state: directory
+        mode: '0755'
+
+    - name: Add new wallet and store output
+      ansible.builtin.shell: |
+        allorad keys add {{ wallet_name }} --keyring-backend test --output json > {{ ansible_env.HOME }}/.allorad/wallets/{{ wallet_name }}.info
+      args:
+        executable: /bin/bash
+
+    - name: Display wallet info message
+      ansible.builtin.debug:
+        msg: "Wallet created. You can find the wallet info, including and seed phrase at {{ ansible_env.HOME }}/.allorad/wallets/{{ wallet_name }}.info"
