@@ -83,7 +83,7 @@
       when: not (INIT_FLAG | bool)
 
     - name: Initialize the node
-      shell: allorad --home {{ APP_HOME }} init {{ node_moniker }} --chain-id {{ NETWORK }} --default-denom {{ DENOM }}
+      shell: allorad --home {{ APP_HOME }} init {{ moniker }} --chain-id {{ NETWORK }} --default-denom {{ DENOM }}
       when: not (INIT_FLAG | bool)
 
     - name: Download genesis file
@@ -163,7 +163,7 @@
         dest: /etc/systemd/system/allora-node.service
       vars:
         app_home: "{{ APP_HOME }}"
-        moniker: "{{ node_moniker }}"
+        moniker: "{{ moniker }}"
         denom: "{{ DENOM }}"
         seeds: "{{ seeds }}"
 
