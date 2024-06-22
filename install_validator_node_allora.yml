@@ -66,12 +66,13 @@
         dest: "{{ ansible_env.HOME }}/allora-chain"
         version: "tags/v0.0.10"
 
-    - name: Clean previous builds
+    - name: Verify Git Tag
       shell: |
         cd {{ ansible_env.HOME }}/allora-chain
-        make clean
-      args:
-        executable: /bin/bash    
+        git tag -l --contains HEAD
+      register: git_tag
+    - debug:
+        msg: "Checked out Git Tag: {{ git_tag.stdout }}"
 
     - name: Run make install
       shell: |
