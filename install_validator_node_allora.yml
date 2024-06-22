@@ -146,8 +146,8 @@
 
     - name: Change ports in config.toml
       ansible.builtin.shell: |
+        sed -i "s/^laddr = \"tcp:\/\/0.0.0.0:26656\"/laddr = \"tcp:\/\/0.0.0.0:26666\"/" {{ APP_HOME }}/config/config.toml
         sed -i "s/^laddr = \"tcp:\/\/127.0.0.1:26657\"/laddr = \"tcp:\/\/127.0.0.1:26667\"/" {{ APP_HOME }}/config/config.toml
-        sed -i "s/^laddr = \"tcp:\/\/127.0.0.1:26656\"/laddr = \"tcp:\/\/127.0.0.1:26666\"/" {{ APP_HOME }}/config/config.toml
       args:
         executable: /bin/bash
 
