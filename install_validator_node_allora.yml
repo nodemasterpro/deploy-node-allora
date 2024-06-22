@@ -4,10 +4,9 @@
   become: true
 
   vars_prompt:
-    - name: node_moniker
+    - name: moniker
       prompt: "Enter your node name"
       private: false
-
 
   vars:
     NETWORK: testnet
@@ -145,6 +144,19 @@
       args:
         executable: /bin/bash
 
+    - name: Change ports in config.toml
+      ansible.builtin.shell: |
+        sed -i "s/^laddr = \"tcp:\/\/127.0.0.1:26657\"/laddr = \"tcp:\/\/127.0.0.1:26667\"/" {{ APP_HOME }}/config/config.toml
+        sed -i "s/^laddr = \"tcp:\/\/127.0.0.1:26656\"/laddr = \"tcp:\/\/127.0.0.1:26666\"/" {{ APP_HOME }}/config/config.toml
+      args:
+        executable: /bin/bash
+
+    - name: Change port in client.toml
+      ansible.builtin.shell: |
+        sed -i "s/^node = \"tcp:\/\/localhost:26657\"/node = \"tcp:\/\/localhost:26667\"/" {{ APP_HOME }}/config/client.toml
+      args:
+        executable: /bin/bash
+
     - name: Create systemd service file from template
       template:
         src: templates/allora-node.service.j2
@@ -176,10 +188,7 @@
         snapshot_url: "{{ webpage_content.content | regex_search('https://snapshots.polkachu.com/testnet-snapshots/allora/allora_[0-9]+\\.tar\\.lz4') }}"
 
     - name: Download the snapshot with curl and show progress
-      ansible.builtin.command:
-        cmd: "curl -L {{ snapshot_url }} -o {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 --progress-bar"
-      args:
-        executable: /bin/bash
+      ansible.builtin.command: "curl -L {{ snapshot_url }} -o {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 --progress-bar"
       register: curl_result
       failed_when: curl_result.rc != 0
 
