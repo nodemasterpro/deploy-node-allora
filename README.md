@@ -4,11 +4,11 @@ This repository contains Ansible scripts for the installation, updating, and rem
 ## Prerequisites
 Recommended specifications for a server:
 
-Memory: 64 GB
-CPU: 8 cores
+Memory: 16 GB
+CPU: 6 cores
 Disk: 1 TB SSD
 Open TCP ports: 26656, 26657 must be open and accessible.
-For hosting Allora nodes, opt for a VPS 4 server from Contabo.
+For hosting Allora nodes, opt for a VPS 2 server from Contabo.
 
 ## Getting Started
 ## Step 1: Installing Dependencies
@@ -34,7 +34,7 @@ cd deploy-node-allora
 Execute the playbook using the following command, specifying the 'moniker' (node name) as an extra variable:
 
 ```
-ansible-playbook install_validator_node_allora.yml -e node_moniker="your_node_name"
+ansible-playbook install_validator_node_allora.yml -e moniker="your_node_name"
 ```
 Note: Replace "your_node_name" with the unique name you wish to assign to your node.
 
@@ -49,8 +49,9 @@ journalctl -u allora-node -f -o cat
 After installing the node, create a wallet essential for network operations:
 
 ```
-allorad keys add your_wallet_name --keyring-backend test
+ansible-playbook create_wallet_allora.yml -e wallet_name="your_wallet_name"
 ```
+Once completed, You can find the wallet information, including private key, seed phrase, and hexadecimal address, in "/root/.allorad/wallets/<your_wallet_name>.info". Save it, as it will be useful for the following steps.
 
 ## Step 6: Requesting Allora Testnet Funds
 Get funds for your wallet via the Allora faucet. Enter the address of your wallet, verify that you are human, and request testnet tokens.
