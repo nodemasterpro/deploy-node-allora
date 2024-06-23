@@ -31,16 +31,27 @@
           - curl
           - git
           - jq
+          - wget
           - build-essential
           - gcc
+          - lz4
         state: present
 
-    - name: Install Go
-      shell: |
-        curl -OL https://golang.org/dl/go1.22.4.linux-amd64.tar.gz
-        sudo tar -C /usr/local -xvf go1.22.4.linux-amd64.tar.gz
-      environment:
-        PATH: "/usr/local/go/bin:{{ ansible_env.PATH }}"
+    - name: Download Go archive
+      get_url:
+        url: "https://golang.org/dl/go1.22.4.linux-amd64.tar.gz"
+        dest: "/tmp/go1.22.4.linux-amd64.tar.gz"
+
+    - name: Extract Go archive to /usr/local
+      ansible.builtin.unarchive:
+        src: "/tmp/go1.22.4.linux-amd64.tar.gz"
+        dest: "/usr/local"
+        remote_src: yes
+
+    - name: Clean up the downloaded Go archive
+      file:
+        path: "/tmp/go1.22.4.linux-amd64.tar.gz"
+        state: absent
 
     - name: Add Go to PATH
       lineinfile:
@@ -48,17 +59,18 @@
         line: 'export PATH=$PATH:/usr/local/go/bin'
         create: yes
 
-    - name: Add GOPATH to PATH
-      shell: |
-        echo 'export PATH=$PATH:$(go env GOPATH)/bin' >> ~/.profile
+    - name: Source profile for Go
+      shell: source ~/.profile
       args:
         executable: /bin/bash
 
-    - name: Source profile for Go
-      shell: |
-        source ~/.profile
-      args:
-        executable: /bin/bash
+    - name: Verify Go installation
+      command: go version
+      register: go_version
+
+    - name: Print Go version
+      debug:
+        msg: "{{ go_version.stdout }}"
 
     - name: Clone Allora Chain repository
       git:
