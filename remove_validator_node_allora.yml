@@ -44,24 +44,53 @@
         state: absent
       ignore_errors: true
 
-    - name: Remove Go binary
+    - name: Remove allorad binary from /root/go/bin
+      ansible.builtin.file:
+        path: /root/go/bin/allorad
+        state: absent
+      ignore_errors: true
+
+    - name: Remove allorad binary from /root/.local/bin
+      ansible.builtin.file:
+        path: /root/.local/bin/allorad
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Go binary directory
       ansible.builtin.file:
         path: /usr/local/go
         state: absent
       ignore_errors: true
 
+    - name: Remove Go workspace directory
+      ansible.builtin.file:
+        path: /root/go
+        state: absent
+      ignore_errors: true
+
     - name: Remove Go bin from PATH in .profile
       lineinfile:
-        path: ~/.profile
+        path: /root/.profile
         regexp: 'export PATH=\$PATH:/usr/local/go/bin'
         state: absent
       ignore_errors: true
 
     - name: Remove allora bin from PATH in .profile
       lineinfile:
-        path: ~/.profile
+        path: /root/.profile
         regexp: 'export PATH=\$PATH=/root/.local/bin'
         state: absent
+      ignore_errors: true
+
+    - name: Remove all Go environment variables from .profile
+      lineinfile:
+        path: /root/.profile
+        regexp: 'export GOPATH=\$HOME/go'
+        state: absent
+      ignore_errors: true
+
+    - name: Reload .profile
+      shell: source /root/.profile
       ignore_errors: true
 
     - name: Reload systemd to apply changes
@@ -72,4 +101,4 @@
 
     - name: Display message
       ansible.builtin.debug:
-        msg: "Allora Validator Node has been removed successfully."
+        msg: "Allora Validator Node and Go have been removed successfully."

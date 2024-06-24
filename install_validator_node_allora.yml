@@ -82,7 +82,6 @@
     - name: Run make install
       shell: |
         cd {{ ansible_env.HOME }}/allora-chain
-        /usr/local/go/bin/go mod tidy
         make install
       args:
         executable: /bin/bash
