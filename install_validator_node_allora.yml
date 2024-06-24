@@ -18,6 +18,7 @@
     GENESIS_FILE: "{{ APP_HOME }}/config/genesis.json"
     DENOM: uallo
     SEEDS_FILE: "/tmp/seeds.txt"
+    GO_VERSION: "1.22.4"
 
   tasks:
     - name: Update and upgrade apt packages
@@ -39,33 +40,33 @@
 
     - name: Download Go archive
       get_url:
-        url: "https://golang.org/dl/go1.22.4.linux-amd64.tar.gz"
-        dest: "/tmp/go1.22.4.linux-amd64.tar.gz"
+        url: "https://golang.org/dl/go{{ GO_VERSION }}.linux-amd64.tar.gz"
+        dest: "/tmp/go{{ GO_VERSION }}.linux-amd64.tar.gz"
 
     - name: Extract Go archive to /usr/local
       ansible.builtin.unarchive:
-        src: "/tmp/go1.22.4.linux-amd64.tar.gz"
+        src: "/tmp/go{{ GO_VERSION }}.linux-amd64.tar.gz"
         dest: "/usr/local"
         remote_src: yes
 
     - name: Clean up the downloaded Go archive
       file:
-        path: "/tmp/go1.22.4.linux-amd64.tar.gz"
+        path: "/tmp/go{{ GO_VERSION }}.linux-amd64.tar.gz"
         state: absent
 
     - name: Add Go to PATH
       lineinfile:
-        path: ~/.profile
-        line: 'export PATH=$PATH:/usr/local/go/bin'
+        path: /root/.profile
+        line: 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin'
         create: yes
 
     - name: Source profile for Go
-      shell: source ~/.profile
+      shell: source /root/.profile
       args:
         executable: /bin/bash
 
     - name: Verify Go installation
-      command: go version
+      command: /usr/local/go/bin/go version
       register: go_version
 
     - name: Print Go version
@@ -81,6 +82,7 @@
     - name: Run make install
       shell: |
         cd {{ ansible_env.HOME }}/allora-chain
+        /usr/local/go/bin/go mod tidy
         make install
       args:
         executable: /bin/bash
