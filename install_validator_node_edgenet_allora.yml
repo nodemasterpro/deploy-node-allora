@@ -9,7 +9,7 @@
       private: false
 
   vars:
-    NETWORK: testnet
+    NETWORK: edgenet
     GENESIS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/genesis.json"
     SEEDS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/seeds.txt"
     APP_HOME: "/root/.allorad"
@@ -191,50 +191,4 @@
         enabled: true
         state: started
 
-    - name: Retrieve the latest allora snapshot URL
-      ansible.builtin.uri:
-        url: "https://www.polkachu.com/testnets/allora/snapshots"
-        return_content: yes
-      register: webpage_content
-
-    - name: Parse the snapshot URL
-      ansible.builtin.set_fact:
-        snapshot_url: "{{ webpage_content.content | regex_search('https://snapshots.polkachu.com/testnet-snapshots/allora/allora_[0-9]+\\.tar\\.lz4') }}"
-
-    - name: Download the snapshot with curl and show progress
-      ansible.builtin.command: "curl -L {{ snapshot_url }} -o {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 --progress-bar"
-      register: curl_result
-      failed_when: curl_result.rc != 0
-
-    - name: Stop Allora Validator Node service
-      ansible.builtin.systemd:
-        name: allora-node
-        state: stopped    
-
-    - name: Backup priv_validator_state.json
-      ansible.builtin.shell: |
-        cp {{ APP_HOME }}/data/priv_validator_state.json {{ APP_HOME }}/priv_validator_state.json.backup
-      args:
-        executable: /bin/bash
-
-    - name: Reset tendermint state
-      ansible.builtin.shell: |
-        allorad tendermint unsafe-reset-all --home {{ APP_HOME }} --keep-addr-book
-      args:
-        executable: /bin/bash
-
-    - name: Extract the snapshot
-      ansible.builtin.shell:
-        cmd: "lz4 -d {{ ansible_env.HOME }}/.allorad/allora_snapshot.tar.lz4 | tar x -C {{ ansible_env.HOME }}/.allorad"
-        executable: /bin/bash
-
-    - name: Restore priv_validator_state.json
-      ansible.builtin.shell: |
-        mv {{ APP_HOME }}/priv_validator_state.json.backup {{ APP_HOME }}/data/priv_validator_state.json
-      args:
-        executable: /bin/bash
-
-    - name: Start Allora Validator Node service
-      ansible.builtin.systemd:
-        name: allora-node
-        state: started
+    
