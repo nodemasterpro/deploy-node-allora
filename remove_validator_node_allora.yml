@@ -11,10 +11,10 @@
         enabled: false
       ignore_errors: true
 
-    - name: Kill any remaining Allora Validator Node processes
-      ansible.builtin.shell: |
-        pkill -f allorad
-      ignore_errors: true
+    #- name: Kill any remaining Allora Validator Node processes
+    #  ansible.builtin.shell: |
+    #    pkill -f allorad
+    #  ignore_errors: true
 
     - name: Wait for any remaining processes to terminate
       ansible.builtin.wait_for:
