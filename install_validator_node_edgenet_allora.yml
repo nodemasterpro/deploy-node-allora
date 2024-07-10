@@ -38,6 +38,17 @@
           - lz4
         state: present
 
+    - name: Check if /usr/local/go exists
+      stat:
+        path: /usr/local/go
+      register: go_directory
+
+    - name: Remove /usr/local/go directory
+      file:
+        path: /usr/local/go
+        state: absent
+      when: go_directory.stat.exists
+
     - name: Download Go archive
       get_url:
         url: "https://golang.org/dl/go{{ GO_VERSION }}.linux-amd64.tar.gz"
