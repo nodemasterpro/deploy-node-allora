@@ -81,6 +81,62 @@ Check the status of your node:
 ```
 allorad q staking validator <validator_address>
 ```
+
+##Step 9: Installing the Allora Worker Node
+Once the project files are ready, initiate the installation of the Allora worker node using this command:
+
+```
+ansible-playbook install_worker_node_allora.yml
+```
+
+Step 10: Viewing Worker Node Logs
+To display all the logs, type this command:
+
+```
+journalctl -u allora-worker-node -f -o cat
+```
+To display only the node worker logs, type this command:
+
+```
+docker logs -f worker-basic-eth-pred
+```
+To exit the logs, type Ctrl+C.
+
+Step 11: Checking the Worker Node
+To check that your worker node is functioning correctly, run this command:
+
+```
+curl -X POST 'http://localhost:6000/api/v1/functions/execute' \
+-H 'Content-Type: application/json' \
+-d '{
+ "function_id": "bafybeigpiwl3o73zvvl6dxdqu7zqcub5mhg65jiky2xqb4rdhfmikswzqm",
+ "method": "allora-inference-function.wasm",
+ "parameters": null,
+ "topic": "1",
+ "config": {
+ "env_vars": [
+ {
+ "name": "BLS_REQUEST_PATH",
+ "value": "/api"
+ },
+ {
+ "name": "ALLORA_ARG_PARAMS",
+ "value": "ETH"
+ }
+ ],
+ "number_of_nodes": -1,
+ "timeout": 2
+ }
+}'
+```
+You should get this type of response:
+
+```
+{"code":"200","request_id":"565ce0b0-3847-45fb-975d-4812f3d14707","results":[{"result":{"stdout":"{\"infererValue\": \"2917.167872527247\"}\n\n","stderr":"","exit_code":0},"peers":["12D3KooWEEBpBSez1q8jLFTd2m5mUfeY3yg7gQsTkecPoZAMXPQZ"],"frequency":100}],"cluster":{"peers":["12D3KooWEEBpBSez1q8jLFTd2m5mUfeY3yg7gQsTkecPoZAMXPQZ"]}
+```
+Code 200 means the answer is correct. Congratulations! Your Allora worker node is operational.
+
+
 ## Additional Information
 Stopping Service
 To stop the Allora validator node:
@@ -88,18 +144,35 @@ To stop the Allora validator node:
 ```
 systemctl stop allora-node
 ```
+
+To stop the Allora worker node:
+```
+systemctl stop allora-worker-node
+
+```
 Starting Service
 To start the Allora validator node:
 
 ```
 systemctl start allora-node
 ```
+```
+systemctl start allora-worker-node
+```
+
 Removing the Allora Validator Node
 To remove the Allora validator node, run this playbook:
 
 ```
-ansible-playbook remove_validator_node_allora.yml
+ansible-playbook remove_worker_node_allora.yml
 ```
+
+To remove the Allora worker node, run this playbook:
+
+```
+ansible-playbook remove_worker_node_allora.yml
+```
+
 Ensure to back up all important data before deleting the Allora node, as this action may remove node data.
 
 By following this guide, you have successfully deployed and managed Allora validator nodes, contributing to the robustness of the network and potentially earning rewards. Join the Allora community on Discord and Twitter to stay informed about the project.

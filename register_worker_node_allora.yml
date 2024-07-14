@@ -1,0 +1,40 @@
+---
+- name: Register Allora Worker Node
+  hosts: localhost
+  become: true
+
+  vars_prompt:
+    - name: wallet_name
+      prompt: "Enter your wallet name"
+      private: false
+    - name: topic_id
+      prompt: "Enter the topic ID"
+      private: false
+
+  tasks:
+    - name: Get worker public key
+      shell: allorad --home={{ ansible_env.HOME }}/.allorad comet show-validator
+      register: worker_pubkey
+
+    - name: Create register-worker.json
+      copy:
+        dest: "{{ ansible_env.HOME }}/.allorad/register-worker.json"
+        content: |
+          {
+              "pubkey": {{worker_pubkey.stdout}},
+              "topic_id": "{{ topic_id }}"
+          }
+
+    - name: Register as Worker
+      shell: |
+        allorad tx register worker {{ ansible_env.HOME }}/.allorad/register-worker.json \
+            --chain-id=edgenet \
+            --home={{ ansible_env.HOME }}/.allorad \
+            --keyring-backend=test \
+            --from={{ wallet_name }} \
+            --yes 
+      register: worker_registration
+
+    - name: Display worker registration output
+      debug:
+        msg: "{{ worker_registration.stdout }}"

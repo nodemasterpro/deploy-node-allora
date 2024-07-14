@@ -3,12 +3,69 @@
   hosts: localhost
   become: true
 
+  vars:
+    GO_VERSION: "1.22.5"
+    ALLOCHAIN_REPO: "https://github.com/allora-network/allora-chain.git"
+
   vars_prompt:
     - name: wallet_name
       prompt: "Enter your wallet name"
       private: false
 
   tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: 'yes'
+
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - git
+          - wget
+          - build-essential
+          - jq
+          - pkg-config
+          - lsb-release
+          - libssl-dev
+          - libreadline-dev
+          - libffi-dev
+          - gcc
+          - unzip
+          - lz4
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Install Go
+      shell: |
+        cd $HOME && \
+        ver="{{ GO_VERSION }}" && \
+        wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz" && \
+        rm -rf /usr/local/go && \
+        tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz" && \
+        rm "go$ver.linux-amd64.tar.gz" && \
+        echo "export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin" >> $HOME/.bash_profile && \
+        source $HOME/.bash_profile && \
+        go version
+      args:
+        executable: /bin/bash
+
+    - name: Clone Allora Chain repository
+      git:
+        repo: "{{ ALLOCHAIN_REPO }}"
+        dest: "{{ ansible_env.HOME }}/allora-chain"
+        version: "tags/v0.2.7"
+        force: yes
+
+    - name: Run make install for Allora Chain
+      shell: |
+        cd {{ ansible_env.HOME }}/allora-chain
+        make install
+      args:
+        executable: /bin/bash
+
     - name: Ensure wallet directory exists
       ansible.builtin.file:
         path: "{{ ansible_env.HOME }}/.allorad/wallets"
