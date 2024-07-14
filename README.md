@@ -4,6 +4,7 @@ This repository contains Ansible scripts for the installation, updating, and rem
 ## Prerequisites
 Recommended specifications for a server:
 
+System: Linux Ubuntu 22.04 with docker installed.
 Memory: 16 GB
 CPU: 6 cores
 Disk: 1 TB SSD
