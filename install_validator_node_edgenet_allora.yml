@@ -185,7 +185,7 @@
 
     - name: Create systemd service file from template
       template:
-        src: templates/allora-node.service.j2
+        src: templates/allora-node.service.yml.j2
         dest: /etc/systemd/system/allora-node.service
       vars:
         app_home: "{{ APP_HOME }}"
