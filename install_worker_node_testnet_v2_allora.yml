@@ -5,7 +5,8 @@
 
   vars:
     WORKER_NAME: myWorker
-    TOPIC_ID: 1
+    TOPIC_ID_1: 1
+    TOPIC_ID_2: 2
     APP_HOME: "/root/.allorad"
     WORKER_DIR: "/root/basic-coin-prediction-node/workers"
     HEAD_DATA_DIR: "/root/basic-coin-prediction-node/head-data"
@@ -136,7 +137,8 @@
         head_id: "{{ head_id }}"
         mnemonic: "{{ mnemonic }}"
         worker_data_dir: "{{ WORKER_DIR }}"
-        topic_id: "{{ TOPIC_ID }}"
+        topic_id_1: "{{ TOPIC_ID_1 }}"
+        topic_id_2: "{{ TOPIC_ID_2 }}"
 
     - name: Create systemd service file for Docker Compose
       template:
