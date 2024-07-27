@@ -11,6 +11,9 @@
       prompt: "Enter your node name"
       private: false
 
+  vars:
+    NETWORK: allora-testnet-1    
+
     
   tasks:
     - name: Get validator public key
@@ -34,7 +37,7 @@
     - name: Stake as Validator
       shell: |
         allorad tx staking create-validator {{ ansible_env.HOME }}/.allorad/stake-validator.json \
-            --chain-id=edgenet \
+            --chain-id={{ NETWORK }} \
             --home={{ ansible_env.HOME }}/.allorad \
             --keyring-backend=test \
             --from={{ wallet_name }} \
