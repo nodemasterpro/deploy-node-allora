@@ -1,14 +1,14 @@
-[Unit]
-Description=Allora Worker Node Service
-After=network.target
+    [Unit]
+    Description=Allora Worker Node Service
+    After=network.target
 
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/root/basic-coin-prediction-node
-ExecStart=/usr/local/bin/docker-compose -f docker-compose.yml up --remove-orphans
-ExecStop=/usr/local/bin/docker-compose -f docker-compose.yml down
-Restart=always
+    [Service]
+    Type=simple
+    User=root
+    WorkingDirectory=/root/basic-coin-prediction-node
+    ExecStart=/usr/local/bin/docker-compose -f docker-compose.yml up --remove-orphans
+    ExecStop=/usr/local/bin/docker-compose -f docker-compose.yml down
+    Restart=always
 
-[Install]
-WantedBy=multi-user.target
+    [Install]
+    WantedBy=multi-user.target
