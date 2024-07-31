@@ -99,7 +99,7 @@ services:
           --allora-chain-restore-mnemonic='{{ mnemonic }}' \
           --allora-node-rpc-address=https://allora-rpc.testnet-1.testnet.allora.network \
           --allora-chain-key-name={{ wallet_name }} \
-          --allora-chain-topic-id={{ topic_id }}
+          --allora-chain-topic-id={{ topic_id_1 }}
     volumes:
       - ./workers/worker-1:/data
     working_dir: /data
@@ -139,7 +139,7 @@ services:
           --allora-chain-restore-mnemonic='{{ mnemonic }}' \
           --allora-node-rpc-address=https://allora-rpc.testnet-1.testnet.allora.network \
           --allora-chain-key-name={{ wallet_name }} \
-          --allora-chain-topic-id={{ topic_id }}
+          --allora-chain-topic-id={{ topitopic_id_2 }}
     volumes:
       - ./workers/worker-2:/data
     working_dir: /data
