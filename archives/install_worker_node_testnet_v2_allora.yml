@@ -1,0 +1,156 @@
+---
+- name: Deploy Allora Worker Node using Ansible
+  hosts: localhost
+  become: true
+
+  vars:
+    WORKER_NAME: myWorker
+    TOPIC_ID_1: 1
+    TOPIC_ID_2: 2
+    APP_HOME: "/root/.allorad"
+    WORKER_DIR: "/root/basic-coin-prediction-node/workers"
+    HEAD_DATA_DIR: "/root/basic-coin-prediction-node/head-data"
+    WORKER_REPO: "https://github.com/allora-network/basic-coin-prediction-node.git"
+    DOCKER_COMPOSE_PATH: "/usr/local/bin/docker-compose"
+    SERVICE_FILE: "/etc/systemd/system/allora-worker-node.service"
+
+  vars_prompt:
+    - name: wallet_name
+      prompt: "Enter your wallet name"
+      private: false
+
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: 'yes'
+
+    - name: Install required packages
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - git
+          - wget
+          - jq
+          - lsb-release
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_version
+      failed_when: docker_version.rc != 0
+      ignore_errors: yes
+
+    - name: Fail if Docker is not installed
+      fail:
+        msg: "Docker is not installed. Please install Docker and rerun the playbook."
+      when: docker_version.rc != 0
+
+    - name: Install Docker Compose
+      shell: |
+        mkdir -p ~/.docker/cli-plugins/
+        curl -SL https://github.com/docker/compose/releases/download/v2.3.3/docker-compose-linux-x86_64 -o {{ DOCKER_COMPOSE_PATH }}
+        chmod +x {{ DOCKER_COMPOSE_PATH }}
+
+    - name: Check Docker Compose installation
+      command: docker-compose --version
+      register: docker_compose_check
+      failed_when: docker_compose_check.rc != 0
+
+    - name: Remove existing worker node repository
+      file:
+        path: "{{ ansible_env.HOME }}/basic-coin-prediction-node"
+        state: absent
+
+    - name: Clone worker node repository
+      git:
+        repo: "{{ WORKER_REPO }}"
+        dest: "{{ ansible_env.HOME }}/basic-coin-prediction-node"
+
+    - name: Ensure worker and head data directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0777'
+      with_items:
+        - "{{ WORKER_DIR }}/worker-1"
+        - "{{ WORKER_DIR }}/worker-2"
+        - "{{ HEAD_DATA_DIR }}"
+
+    - name: Set permissions on worker and head data directories
+      command: chmod -R 777 {{ item }}
+      with_items:
+        - "{{ WORKER_DIR }}/worker-1"
+        - "{{ WORKER_DIR }}/worker-2"
+        - "{{ HEAD_DATA_DIR }}"
+
+    - name: Generate head keys
+      shell: |
+        sudo docker run --privileged --entrypoint=bash -v {{ HEAD_DATA_DIR }}:/data alloranetwork/allora-inference-base:latest -c "mkdir -p /data/keys && (cd /data/keys && allora-keys)"
+      args:
+        executable: /bin/bash
+
+    - name: Generate worker keys for worker-1
+      shell: |
+        sudo docker run --privileged --entrypoint=bash -v {{ WORKER_DIR }}/worker-1:/data alloranetwork/allora-inference-base:latest -c "mkdir -p /data/keys && (cd /data/keys && allora-keys)"
+      args:
+        executable: /bin/bash
+
+    - name: Generate worker keys for worker-2
+      shell: |
+        sudo docker run --privileged --entrypoint=bash -v {{ WORKER_DIR }}/worker-2:/data alloranetwork/allora-inference-base:latest -c "mkdir -p /data/keys && (cd /data/keys && allora-keys)"
+      args:
+        executable: /bin/bash
+
+    - name: Get head-id
+      shell: |
+        cat {{ HEAD_DATA_DIR }}/keys/identity
+      register: head_id_output
+
+    - name: Set head-id fact
+      set_fact:
+        head_id: "{{ head_id_output.stdout }}"
+
+    - name: Check if wallet info file exists
+      stat:
+        path: "/root/.allorad/wallets/{{ wallet_name }}.info"
+      register: wallet_info
+
+    - name: Read mnemonic from wallet info file
+      command: cat /root/.allorad/wallets/{{ wallet_name }}.info
+      register: wallet_info_content
+      when: wallet_info.stat.exists
+
+    - name: Set mnemonic from existing wallet
+      set_fact:
+        mnemonic: "{{ (wallet_info_content.stdout | from_json).mnemonic }}"
+      when: wallet_info.stat.exists
+
+    - name: Generate docker-compose.yml file
+      template:
+        src: templates/docker-compose.yml.j2
+        dest: "{{ ansible_env.HOME }}/basic-coin-prediction-node/docker-compose.yml"
+      vars:
+        head_id: "{{ head_id }}"
+        mnemonic: "{{ mnemonic }}"
+        worker_data_dir: "{{ WORKER_DIR }}"
+        topic_id_1: "{{ TOPIC_ID_1 }}"
+        topic_id_2: "{{ TOPIC_ID_2 }}"
+
+    - name: Create systemd service file for Docker Compose
+      template:
+        src: templates/allora-docker-compose.service.j2
+        dest: "{{ SERVICE_FILE }}"
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: true
+
+    - name: Enable and start Allora Worker Node service
+      systemd:
+        name: allora-worker-node
+        enabled: true
+        state: restarted

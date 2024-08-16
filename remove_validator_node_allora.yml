@@ -18,7 +18,7 @@
 
     - name: Wait for any remaining processes to terminate
       ansible.builtin.wait_for:
-        timeout: 30
+        timeout: 10
 
     - name: Remove Allora Validator Node service file
       ansible.builtin.file:

@@ -1,0 +1,10 @@
+Flask
+requests
+pandas
+numpy
+scikit-learn
+python-binance
+transformers
+torch
+accelerate
+prophet
