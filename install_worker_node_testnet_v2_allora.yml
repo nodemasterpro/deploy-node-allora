@@ -135,6 +135,7 @@
         ./init.config
       args:
         chdir: "{{ BASIC_REPO_DIR }}"
+      ignore_errors: yes
 
     - name: Make init.config executable and run it for offchain repo
       shell: |
