@@ -124,6 +124,7 @@
       copy:
         src: "{{ item.src }}"
         dest: "{{ item.dest }}"
+        remote_src: no
       with_items:
         - { src: "{{ OFFCHAIN_REPO_DIR }}/requirements.txt", dest: "{{ BASIC_REPO_DIR }}/requirements.txt" }
         - { src: "{{ OFFCHAIN_REPO_DIR }}/Dockerfile", dest: "{{ BASIC_REPO_DIR }}/Dockerfile" }
