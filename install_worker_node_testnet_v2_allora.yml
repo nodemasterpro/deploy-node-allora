@@ -113,7 +113,7 @@
 
     - name: Generate docker-compose.yml file for offchain repo
       template:
-        src: templates/docker-compose_offchain.yaml.j2
+        src: templates/ddocker-compose_offchain.yaml.j2
         dest: "{{ OFFCHAIN_REPO_DIR }}/docker-compose.yml"
       vars:
         topic_id_1: "{{ TOPIC_ID_1 }}"
