@@ -82,9 +82,9 @@
 
     - name: Copy price-prediction-worker to basic-prediction project
       copy:
-        src: "{{ OFFCHAIN_REPO_DIR }}/price-prediction-worker"
-        dest: "{{ BASIC_REPO_DIR }}/"
-        remote_src: yes
+       src: "templates/price-prediction-worker"
+       dest: "{{ BASIC_REPO_DIR }}/"
+       remote_src: no
 
     - name: Generate config.json file
       template:
