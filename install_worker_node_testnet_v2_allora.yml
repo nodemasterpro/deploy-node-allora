@@ -15,7 +15,7 @@
     OFFCHAIN_REPO: "https://github.com/allora-network/allora-offchain-node.git"
     DOCKER_COMPOSE_PATH: "/usr/local/bin/docker-compose"
 
-  vars_file:
+  vars_files:
     - vars.yml
 
   vars_prompt:
