@@ -4,7 +4,7 @@
   become: true
 
   vars:
-    GO_VERSION: "1.22.3"
+    GO_VERSION: "1.23.0"
     ALLOCHAIN_REPO: "https://github.com/allora-network/allora-chain.git"
 
   vars_prompt:
@@ -56,7 +56,7 @@
       git:
         repo: "{{ ALLOCHAIN_REPO }}"
         dest: "{{ ansible_env.HOME }}/allora-chain"
-        version: "tags/v0.2.4"
+        version: "tags/v0.3.0"
         force: yes
 
     - name: Run make install for Allora Chain
