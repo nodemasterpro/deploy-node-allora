@@ -19,9 +19,11 @@
     - name: wallet_name
       prompt: "Enter your wallet name"
       private: false
+      default:"default wallet_name"
     - name: mnemonic
       prompt: "Enter your wallet mnemonic"
       private: true
+      default: "default mnemonic phrase"
 
   tasks:
     - name: Update and upgrade apt packages
