@@ -15,15 +15,18 @@
     OFFCHAIN_REPO: "https://github.com/allora-network/allora-offchain-node.git"
     DOCKER_COMPOSE_PATH: "/usr/local/bin/docker-compose"
 
+  vars_file:
+    - vars.yml
+
   vars_prompt:
     - name: wallet_name
       prompt: "Enter your wallet name"
       private: false
-      default: "default wallet_name"
+      default: "{wallet_name}"
     - name: mnemonic
       prompt: "Enter your wallet mnemonic"
       private: true
-      default: "default mnemonic phrase"
+      default: "{mnemonic}"
 
   tasks:
     - name: Update and upgrade apt packages
