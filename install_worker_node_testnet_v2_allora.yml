@@ -143,6 +143,7 @@
         ./init.config
       args:
         chdir: "{{ OFFCHAIN_REPO_DIR }}"
+      ignore_errors: yes
 
     - name: Create systemd service file for Offchain Worker
       template:
