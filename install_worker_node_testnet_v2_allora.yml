@@ -128,7 +128,6 @@
       with_items:
         - { src: "{{ OFFCHAIN_REPO_DIR }}/requirements.txt", dest: "{{ BASIC_REPO_DIR }}/requirements.txt" }
         - { src: "{{ OFFCHAIN_REPO_DIR }}/Dockerfile", dest: "{{ BASIC_REPO_DIR }}/Dockerfile" }
-        remote_src: no
 
     - name: Make init.config executable and run it for basic repo
       shell: |
