@@ -13,13 +13,18 @@
     HF_REPO: "https://github.com/allora-network/allora-huggingface-walkthrough.git"
     DOCKER_COMPOSE_PATH: "/usr/local/bin/docker-compose"
 
+  vars_files:
+    - vars.yml
+
   vars_prompt:
     - name: wallet_name
       prompt: "Enter your wallet name"
       private: false
+      default: "{wallet_name}"
     - name: mnemonic
       prompt: "Enter your wallet mnemonic"
       private: true
+      default: "{mnemonic}"
 
   tasks:
     - name: Update and upgrade apt packages
@@ -91,7 +96,34 @@
         wallet_name: "{{ wallet_name }}"
         mnemonic: "{{ mnemonic }}"
 
-    - name: Make init.config executable and run it
+    - name: Generate docker-compose.yml file for basic repo
+      template:
+        src: templates/docker-compose_basic.yaml.j2
+        dest: "{{ BASIC_REPO_DIR }}/docker-compose.yml"
+      vars:
+        topic_id_1: "{{ TOPIC_ID_1 }}"
+        topic_id_2: "{{ TOPIC_ID_2 }}"
+        topic_id_3: "{{ TOPIC_ID_3 }}"
+
+    - name: Generate docker-compose.yml file for offchain repo
+      template:
+        src: templates/ddocker-compose_offchain.yaml.j2
+        dest: "{{ OFFCHAIN_REPO_DIR }}/docker-compose.yml"
+      vars:
+        topic_id_1: "{{ TOPIC_ID_1 }}"
+        topic_id_2: "{{ TOPIC_ID_2 }}"
+        topic_id_3: "{{ TOPIC_ID_3 }}"
+
+    - name: Copy requirements.txt and Dockerfile to basic repo
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        remote_src: no
+      with_items:
+        - { src: "templates/requirements.txt", dest: "{{ BASIC_REPO_DIR }}/requirements.txt" }
+        - { src: "templates/Dockerfile", dest: "{{ BASIC_REPO_DIR }}/Dockerfile" }
+
+    - name: Make init.config executable and run it for basic repo
       shell: |
         chmod +x init.config
         ./init.config
