@@ -1,74 +1,42 @@
 {
-  "wallet": {
-    "addressKeyName": "{{ wallet_name }}",
-    "addressRestoreMnemonic": "{{ mnemonic }}",
-    "alloraHomeDir": "",
-    "gas": "1000000",
-    "gasAdjustment": 1.0,
-    "nodeRpc": "https://allora-rpc.testnet-1.testnet.allora.network/",
-    "maxRetries": 1,
-    "delay": 1,
-    "submitTx": true
-  },
-  "worker": [
-    {
-      "topicId": 1,
-      "inferenceEntrypointName": "api-worker-reputer",
-      "loopSeconds": 5,
-      "parameters": {
-        "InferenceEndpoint": "http://source:8000/inference/{Token}",
-        "Token": "ETH"
-      }
+    "wallet": {
+        "addressKeyName": "{{ wallet_name }}",
+        "addressRestoreMnemonic": "{{ mnemonic }}",
+        "alloraHomeDir": "",
+        "gas": "1000000",
+        "gasAdjustment": 1.0,
+        "nodeRpc": "https://allora-rpc.testnet.allora.network/",
+        "maxRetries": 1,
+        "delay": 1,
+        "submitTx": false
     },
-    {
-      "topicId": 3,
-      "inferenceEntrypointName": "api-worker-reputer",
-      "loopSeconds": 5,
-      "parameters": {
-        "InferenceEndpoint": "http://source:8000/inference/{Token}",
-        "Token": "BTC"
-      }
-    },
-    {
-      "topicId": 5,
-      "inferenceEntrypointName": "api-worker-reputer",
-      "loopSeconds": 5,
-      "parameters": {
-        "InferenceEndpoint": "http://source:8000/inference/{Token}",
-        "Token": "SOL"
-      }
-    }
-  ],
-  "reputer": [
-    {
-      "topicId": 1,
-      "reputerEntrypointName": "api-worker-reputer",
-      "loopSeconds": 30,
-      "minStake": 100000,
-      "parameters": {
-        "SourceOfTruthEndpoint": "http://source:8000/truth/{Token}/{BlockHeight}",
-        "Token": "ethereum"
-      }
-    },
-    {
-      "topicId": 3,
-      "reputerEntrypointName": "api-worker-reputer",
-      "loopSeconds": 30,
-      "minStake": 100000,
-      "parameters": {
-        "SourceOfTruthEndpoint": "http://source:8000/truth/{Token}/{BlockHeight}",
-        "Token": "bitcoin"
-      }
-    },
-    {
-      "topicId": 5,
-      "reputerEntrypointName": "api-worker-reputer",
-      "loopSeconds": 30,
-      "minStake": 100000,
-      "parameters": {
-        "SourceOfTruthEndpoint": "http://source:8000/truth/{Token}/{BlockHeight}",
-        "Token": "solana"
-      }
-    }
-  ]
+    "worker": [
+        {
+            "topicId": 1,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 5,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}",
+                "Token": "ETH"
+            }
+        },
+        {
+            "topicId": 3,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 5,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}",
+                "Token": "BTC"
+            }
+        },
+        {
+            "topicId": 5,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 5,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}",
+                "Token": "SOL"
+            }
+        }
+    ]
 }

@@ -1,0 +1,88 @@
+import os
+import pandas as pd
+from prophet import Prophet
+import pickle
+import logging
+import requests
+from datetime import datetime, timedelta
+import time
+from flask import Flask, Response
+import json
+
+# Configuration du logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Configuration
+INFERENCE_API_ADDRESS = os.getenv('INFERENCE_API_ADDRESS', 'http://inference:8000')
+TOPIC_ID = os.getenv('TOPIC_ID', '1')
+model_file_path = "/app/model/price_prediction_model.pkl"
+
+app = Flask(__name__)
+
+def get_token_from_topic_id(topic_id):
+    topic_id_to_token = {
+        '1': 'ETH',
+        '3': 'BTC',
+        '5': 'SOL'
+    }
+    return topic_id_to_token.get(topic_id, 'ETH')
+
+def get_cached_binance_data(symbol, interval='1d', limit=30):
+    base_url = "https://api.binance.com/api/v3/klines"
+    params = {
+        "symbol": f"{symbol}USDT",
+        "interval": interval,
+        "limit": limit
+    }
+    try:
+        response = requests.get(base_url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df['close'] = df['close'].astype(float)
+        return df[['timestamp', 'close']]
+    except requests.RequestException as e:
+        logger.error(f"Failed to retrieve data from Binance API: {str(e)}")
+        return None
+
+def train_model(df):
+    df = df.rename(columns={'timestamp': 'ds', 'close': 'y'})
+    model = Prophet(daily_seasonality=True)
+    model.fit(df)
+    return model
+
+def save_model(model):
+    with open(model_file_path, "wb") as f:
+        pickle.dump(model, f)
+    logger.info(f"Trained Prophet model saved to {model_file_path}")
+
+def load_model():
+    with open(model_file_path, "rb") as f:
+        model = pickle.load(f)
+    return model
+
+@app.route("/inference/<string:token>")
+def get_inference(token):
+    df = get_cached_binance_data(token)
+    if df is None:
+        return Response(json.dumps({"error": "Failed to retrieve data from Binance API"}), 
+                        status=500, 
+                        mimetype='application/json')
+
+    if not os.path.exists(model_file_path):
+        model = train_model(df)
+        save_model(model)
+    else:
+        model = load_model()
+
+    future = model.make_future_dataframe(periods=1, freq='D')
+    forecast = model.predict(future)
+    prediction = forecast.iloc[-1]['yhat']
+
+    logger.info(f"Forecast for {token}: {prediction}")
+    return Response(str(prediction), status=200)
+
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=8000, debug=True)

@@ -9,10 +9,8 @@
     TOPIC_ID_2: 3
     TOPIC_ID_3: 5
     APP_HOME: "/root/.allorad"
-    BASIC_REPO_DIR: "/root/basic-coin-prediction-node"
-    OFFCHAIN_REPO_DIR: "/root/allora-offchain-node"
-    BASIC_REPO: "https://github.com/allora-network/basic-coin-prediction-node.git"
-    OFFCHAIN_REPO: "https://github.com/allora-network/allora-offchain-node.git"
+    HF_REPO_DIR: "/root/allora-huggingface-walkthrough"
+    HF_REPO: "https://github.com/allora-network/allora-huggingface-walkthrough.git"
     DOCKER_COMPOSE_PATH: "/usr/local/bin/docker-compose"
 
   vars_prompt:
@@ -64,105 +62,55 @@
       register: docker_compose_check
       failed_when: docker_compose_check.rc != 0
 
-    - name: Remove existing repositories
+    - name: Remove existing repository
       file:
-        path: "{{ item }}"
+        path: "{{ HF_REPO_DIR }}"
         state: absent
-      with_items:
-        - "{{ BASIC_REPO_DIR }}"
-        - "{{ OFFCHAIN_REPO_DIR }}"
 
-    - name: Clone repositories
+    - name: Clone Hugging Face repository
       git:
-        repo: "{{ item.repo }}"
-        dest: "{{ item.dest }}"
-      with_items:
-        - { repo: "{{ BASIC_REPO }}", dest: "{{ BASIC_REPO_DIR }}" }
-        - { repo: "{{ OFFCHAIN_REPO }}", dest: "{{ OFFCHAIN_REPO_DIR }}" }
+        repo: "{{ HF_REPO }}"
+        dest: "{{ HF_REPO_DIR }}"
 
-    - name: Copy price-prediction-worker to basic-prediction project
+    - name: Copy template files
       copy:
-        src: "{{ OFFCHAIN_REPO_DIR }}/price-prediction-worker"
-        dest: "{{ BASIC_REPO_DIR }}/"
-        remote_src: yes
+        src: "templates/allora-huggingface-walkthrough/{{ item }}"
+        dest: "{{ HF_REPO_DIR }}/{{ item }}"
+      with_items:
+        - config.json.j2
+        - app_chronos.py.j2
+        - Dockerfile.j2
+        - requirements.txt.j2
+        - docker-compose.yaml.j2
 
     - name: Generate config.json file
       template:
         src: templates/config.json.j2
-        dest: "{{ item }}/config.json"
-      with_items:
-        - "{{ BASIC_REPO_DIR }}"
-        - "{{ OFFCHAIN_REPO_DIR }}"
+        dest: "{{ HF_REPO_DIR }}/config.json"
       vars:
         wallet_name: "{{ wallet_name }}"
         mnemonic: "{{ mnemonic }}"
 
-    - name: Generate docker-compose.yml file for basic repo
-      template:
-        src: templates/docker-compose_basic.yaml.j2
-        dest: "{{ BASIC_REPO_DIR }}/docker-compose.yml"
-      vars:
-        topic_id_1: "{{ TOPIC_ID_1 }}"
-        topic_id_2: "{{ TOPIC_ID_2 }}"
-        topic_id_3: "{{ TOPIC_ID_3 }}"
-
-    - name: Generate docker-compose.yml file for offchain repo
-      template:
-        src: templates/docker-compose_offchain.yaml.j2
-        dest: "{{ OFFCHAIN_REPO_DIR }}/docker-compose.yml"
-      vars:
-        topic_id_1: "{{ TOPIC_ID_1 }}"
-        topic_id_2: "{{ TOPIC_ID_2 }}"
-        topic_id_3: "{{ TOPIC_ID_3 }}"
-
-    - name: Copy requirements.txt and Dockerfile to basic repo
-      copy:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-      with_items:
-        - { src: "{{ OFFCHAIN_REPO_DIR }}/requirements.txt", dest: "{{ BASIC_REPO_DIR }}/requirements.txt" }
-        - { src: "{{ OFFCHAIN_REPO_DIR }}/Dockerfile", dest: "{{ BASIC_REPO_DIR }}/Dockerfile" }
-
-    - name: Make init.config executable and run it for basic repo
+    - name: Make init.config executable and run it
       shell: |
         chmod +x init.config
         ./init.config
       args:
-        chdir: "{{ BASIC_REPO_DIR }}"
+        chdir: "{{ HF_REPO_DIR }}"
 
-    - name: Make init.config executable and run it for offchain repo
-      shell: |
-        chmod +x init.config
-        ./init.config
-      args:
-        chdir: "{{ OFFCHAIN_REPO_DIR }}"
-
-    - name: Create systemd service file for Offchain Worker
+    - name: Create systemd service file for Hugging Face Worker
       template:
-        src: templates/allora-offchain-worker.service.j2
-        dest: /etc/systemd/system/allora-offchain-worker.service
+        src: templates/allora-worker.service.j2
+        dest: /etc/systemd/system/allora-worker.service
       vars:
-        offchain_repo_dir: "{{ OFFCHAIN_REPO_DIR }}"
-
-    - name: Create systemd service file for Basic Prediction
-      template:
-        src: templates/allora-basic-prediction.service.j2
-        dest: /etc/systemd/system/allora-basic-prediction.service
-      vars:
-        basic_repo_dir: "{{ BASIC_REPO_DIR }}"
+        hf_repo_dir: "{{ HF_REPO_DIR }}"
 
     - name: Reload systemd daemon
       systemd:
         daemon_reload: true
 
-    - name: Enable and start Allora Offchain Worker service
+    - name: Enable and start Allora Hugging Face Worker service
       systemd:
-        name: allora-offchain-worker
-        enabled: true
-        state: restarted
-
-    - name: Enable and start Allora Basic Prediction service
-      systemd:
-        name: allora-basic-prediction
+        name: allora-worker
         enabled: true
         state: restarted

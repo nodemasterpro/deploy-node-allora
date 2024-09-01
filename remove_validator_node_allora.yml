@@ -1,6 +1,6 @@
 ---
 - name: Remove Allora Validator Node
-  hosts: localhost
+  hosts: all
   become: true
 
   tasks:

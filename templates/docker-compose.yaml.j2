@@ -1,0 +1,49 @@
+services:
+  inference:
+    container_name: inference-hf
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -u /app/app_chronos.py
+    ports:
+      - "8000:8000"
+
+  worker-eth:
+    container_name: worker-eth
+    image: alloranetwork/allora-offchain-node:latest
+    volumes:
+      - ./worker-data:/data
+    depends_on:
+      - inference
+    env_file:
+      - ./worker-data/env_file
+    environment:
+      - TOPIC_ID=1
+
+  worker-btc:
+    container_name: worker-btc
+    image: alloranetwork/allora-offchain-node:latest
+    volumes:
+      - ./worker-data:/data
+    depends_on:
+      - inference
+    env_file:
+      - ./worker-data/env_file
+    environment:
+      - TOPIC_ID=3
+
+  worker-sol:
+    container_name: worker-sol
+    image: alloranetwork/allora-offchain-node:latest
+    volumes:
+      - ./worker-data:/data
+    depends_on:
+      - inference
+    env_file:
+      - ./worker-data/env_file
+    environment:
+      - TOPIC_ID=5
+  
+volumes:
+  inference-data:
+  worker-data:
