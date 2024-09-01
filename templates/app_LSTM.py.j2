@@ -3,8 +3,7 @@ from flask import Flask, Response
 import requests
 import json
 import time
-logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,6 +11,38 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+
+logging.basicConfig(level=logging.INFO)
+app = Flask(__name__)
+
+# Fonction pour récupérer les données de Binance
+def get_cached_binance_data(symbol, interval='1d', limit=30):
+    base_url = "https://api.binance.com/api/v3/klines"
+    params = {
+        "symbol": f"{symbol}USDT",
+        "interval": interval,
+        "limit": limit
+    }
+    try:
+        response = requests.get(base_url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df['close'] = df['close'].astype(float)
+        return df[['timestamp', 'close']]
+    except requests.RequestException as e:
+        app.logger.error(f"Failed to retrieve data from Binance API: {str(e)}")
+        return None
+    
+def prepare_data(token, limit=60):
+    df = get_cached_binance_data(token, limit=limit)
+    if df is None or df.empty or len(df) < 30:
+        raise ValueError(f"Insufficient data for token {token}. Need at least 30 data points, got {len(df) if df is not None else 0}")
+    scaler = MinMaxScaler()
+    scaled_data = scaler.fit_transform(df[['close']].values)
+    return df, scaler, scaled_data
+    
 
 class CryptoDataset(Dataset):
     def __init__(self, data, seq_length):
@@ -40,19 +71,24 @@ class LSTM(nn.Module):
         out = self.fc(out[:, -1, :])
         return out
 
-# Préparation des données
-def prepare_data(token):
-    df = get_cached_binance_data(token)
-    if df is None:
-        raise ValueError("Failed to retrieve data from Binance API")
+def prepare_data(token, limit=60):
+    df = get_cached_binance_data(token, limit=limit)
+    if df is None or df.empty or len(df) < 30:
+        raise ValueError(f"Insufficient data for token {token}. Need at least 30 data points, got {len(df) if df is not None else 0}")
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(df[['close']].values)
     return df, scaler, scaled_data
 
-# Initialisation du modèle et entraînement
+
 def initialize_and_train_model(scaled_data, seq_length):
+    if len(scaled_data) < seq_length:
+       raise ValueError(f"Insufficient data for training. Need at least {seq_length} data points, got {len(scaled_data)}")
+    
     dataset = CryptoDataset(scaled_data, seq_length)
-    train_loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    if len(dataset) == 0:
+        raise ValueError("Dataset is empty after preprocessing")
+    
+    train_loader = DataLoader(dataset, batch_size=min(8, len(dataset)), shuffle=True)
 
     input_size = 1
     hidden_size = 64
@@ -66,15 +102,13 @@ def initialize_and_train_model(scaled_data, seq_length):
     train_model(model, train_loader, criterion, optimizer, num_epochs=50)
     return model
 
-# Sauvegarde du modèle
 def save_model(model, path='crypto_lstm_model.pth'):
     torch.save(model.state_dict(), path)
     app.logger.info(f"Model saved to {path}")
 
-# Chargement du modèle
 def load_model(path='crypto_lstm_model.pth'):
     model = LSTM(1, 64, 2, 1)
-    model.load_state_dict(torch.load(path))
+    model.load_state_dict(torch.load(path, weights_only=True))
     model.eval()
     return model
 
@@ -96,36 +130,10 @@ def predict(model, data):
         prediction = model(inputs)
     return prediction.item()
 
-# Préparation des données
-df = get_cached_binance_data(token)  # Utilisez votre fonction existante
-scaler = MinMaxScaler()
-scaled_data = scaler.fit_transform(df[['close']].values)
-
-seq_length = 30  # Nombre de points de données passés à utiliser pour la prédiction
-dataset = CryptoDataset(scaled_data, seq_length)
-train_loader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-# Initialisation du modèle
-input_size = 1
-hidden_size = 64
-num_layers = 2
-output_size = 1
-
-model = LSTM(input_size, hidden_size, num_layers, output_size)
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-# Entraînement du modèle
-train_model(model, train_loader, criterion, optimizer, num_epochs=50)
-
-# Sauvegarde du modèle
-torch.save(model.state_dict(), 'crypto_lstm_model.pth')
-
-# Prédiction
 @app.route("/inference/<string:token>")
 def get_inference(token):
     try:
-        df, scaler, scaled_data = prepare_data(token)
+        df, scaler, scaled_data = prepare_data(token, limit=60)
         
         model_path = 'crypto_lstm_model.pth'
         if not os.path.exists(model_path):
@@ -140,9 +148,12 @@ def get_inference(token):
 
         app.logger.info(f"Forecast for {token}: {unscaled_prediction}")
         return Response(str(unscaled_prediction), status=200)
+    except ValueError as ve:
+        app.logger.error(f"Value error during prediction: {str(ve)}")
+        return Response(json.dumps({"error": str(ve)}), status=400, mimetype='application/json')
     except Exception as e:
-        app.logger.error(f"Prediction error: {str(e)}")
-        return Response(json.dumps({"error": str(e)}), status=500, mimetype='application/json')
-
+        app.logger.error(f"Unexpected error during prediction: {str(e)}")
+        return Response(json.dumps({"error": "An unexpected error occurred"}), status=500, mimetype='application/json')
+    
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000, debug=True)

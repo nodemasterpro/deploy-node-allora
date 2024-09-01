@@ -20,6 +20,14 @@ model_file_path = "/app/model/price_prediction_model.pkl"
 
 app = Flask(__name__)
 
+def ensure_model_directory():
+    model_dir = os.path.dirname(model_file_path)
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+        logger.info(f"Created model directory: {model_dir}")
+
+ensure_model_directory()
+
 def get_token_from_topic_id(topic_id):
     topic_id_to_token = {
         '1': 'ETH',
@@ -49,7 +57,8 @@ def get_cached_binance_data(symbol, interval='1d', limit=30):
 
 def train_model(df):
     df = df.rename(columns={'timestamp': 'ds', 'close': 'y'})
-    model = Prophet(daily_seasonality=True)
+    model = Prophet(daily_seasonality=True, yearly_seasonality=True, weekly_seasonality=True)
+    model.add_country_holidays(country_name='US')
     model.fit(df)
     return model
 
@@ -65,24 +74,33 @@ def load_model():
 
 @app.route("/inference/<string:token>")
 def get_inference(token):
-    df = get_cached_binance_data(token)
-    if df is None:
-        return Response(json.dumps({"error": "Failed to retrieve data from Binance API"}), 
+    try:
+        df = get_cached_binance_data(token, limit=365)  # Utilisez plus de données historiques
+        if df is None or df.empty:
+            return Response(json.dumps({"error": "Failed to retrieve data from Binance API"}), 
+                            status=500, 
+                            mimetype='application/json')
+
+        if not os.path.exists(model_file_path):
+            model = train_model(df)
+            save_model(model)
+        else:
+            model = load_model()
+
+        future = model.make_future_dataframe(periods=1, freq='D')
+        forecast = model.predict(future)
+        prediction = forecast.iloc[-1]['yhat']
+
+        logger.info(f"Forecast for {token}: {prediction}")
+        return Response(str(prediction), status=200)
+    except Exception as e:
+        logger.error(f"Error during inference: {str(e)}")
+        return Response(json.dumps({"error": "An unexpected error occurred"}), 
                         status=500, 
                         mimetype='application/json')
 
-    if not os.path.exists(model_file_path):
-        model = train_model(df)
-        save_model(model)
-    else:
-        model = load_model()
-
-    future = model.make_future_dataframe(periods=1, freq='D')
-    forecast = model.predict(future)
-    prediction = forecast.iloc[-1]['yhat']
-
-    logger.info(f"Forecast for {token}: {prediction}")
-    return Response(str(prediction), status=200)
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=8000, debug=True)
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000, debug=True)

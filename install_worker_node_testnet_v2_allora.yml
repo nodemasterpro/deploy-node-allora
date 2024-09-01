@@ -3,6 +3,7 @@
   hosts: localhost
   become: true
 
+  
   vars:
     WORKER_NAME: myWorker
     TOPIC_ID_1: 1
@@ -17,14 +18,18 @@
     - vars.yml
 
   vars_prompt:
-    - name: wallet_name
-      prompt: "Enter your wallet name"
-      private: false
-      default: "{wallet_name}"
-    - name: mnemonic
-      prompt: "Enter your wallet mnemonic"
-      private: true
-      default: "{mnemonic}"
+  - name: model_type
+    prompt: "Enter the model type (chronos, LSTM, or prophet)"
+    private: false
+    default: "chronos"
+  - name: wallet_name
+    prompt: "Enter your wallet name"
+    private: false
+    default: "{wallet_name}"
+  - name: mnemonic
+    prompt: "Enter your wallet mnemonic"
+    private: true
+    default: "{mnemonic}"
 
   tasks:
     - name: Update and upgrade apt packages
@@ -80,13 +85,16 @@
     - name: Copy template files
       copy:
         src: "templates/allora-huggingface-walkthrough/{{ item }}"
-        dest: "{{ HF_REPO_DIR }}/{{ item }}"
+        dest: "{{ HF_REPO_DIR }}/{{ item | regex_replace('_' + model_type + '\\.py\\.j2$', '.py') }}"
       with_items:
-        - config.json.j2
-        - app_chronos.py.j2
-        - Dockerfile.j2
-        - requirements.txt.j2
-        - docker-compose.yaml.j2
+        - "config.json.j2"
+        - "Dockerfile.j2"
+        - "requirements.txt.j2"
+        - "docker-compose.yaml.j2"
+        - "app_{{ model_type }}.py.j2"
+
+    - name: Rename model-specific app file
+      command: mv "{{ HF_REPO_DIR }}/app_{{ model_type }}.py" "{{ HF_REPO_DIR }}/app.py" 
 
     - name: Generate config.json file
       template:
@@ -95,33 +103,6 @@
       vars:
         wallet_name: "{{ wallet_name }}"
         mnemonic: "{{ mnemonic }}"
-
-    - name: Generate docker-compose.yml file for basic repo
-      template:
-        src: templates/docker-compose_basic.yaml.j2
-        dest: "{{ BASIC_REPO_DIR }}/docker-compose.yml"
-      vars:
-        topic_id_1: "{{ TOPIC_ID_1 }}"
-        topic_id_2: "{{ TOPIC_ID_2 }}"
-        topic_id_3: "{{ TOPIC_ID_3 }}"
-
-    - name: Generate docker-compose.yml file for offchain repo
-      template:
-        src: templates/ddocker-compose_offchain.yaml.j2
-        dest: "{{ OFFCHAIN_REPO_DIR }}/docker-compose.yml"
-      vars:
-        topic_id_1: "{{ TOPIC_ID_1 }}"
-        topic_id_2: "{{ TOPIC_ID_2 }}"
-        topic_id_3: "{{ TOPIC_ID_3 }}"
-
-    - name: Copy requirements.txt and Dockerfile to basic repo
-      copy:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        remote_src: no
-      with_items:
-        - { src: "templates/requirements.txt", dest: "{{ BASIC_REPO_DIR }}/requirements.txt" }
-        - { src: "templates/Dockerfile", dest: "{{ BASIC_REPO_DIR }}/Dockerfile" }
 
     - name: Make init.config executable and run it for basic repo
       shell: |
@@ -140,6 +121,13 @@
     - name: Reload systemd daemon
       systemd:
         daemon_reload: true
+
+    - name: Stop existing containers, remove images, and rebuild
+      shell: |
+        cd {{ HF_REPO_DIR }}
+        docker-compose down --rmi all --volumes --remove-orphans
+        docker-compose build --no-cache
+  
 
     - name: Enable and start Allora Hugging Face Worker service
       systemd:

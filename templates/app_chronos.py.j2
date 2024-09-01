@@ -1,147 +1,111 @@
 import logging
+import pandas as pd
+import torch
 from flask import Flask, Response
 import requests
 import json
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from chronos import ChronosPipeline
+from datetime import datetime, timedelta
 import time
+
 logging.basicConfig(level=logging.INFO)
+
+# create our Flask app
 app = Flask(__name__)
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 
-class CryptoDataset(Dataset):
-    def __init__(self, data, seq_length):
-        self.data = torch.FloatTensor(data)
-        self.seq_length = seq_length
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    def __len__(self):
-        return len(self.data) - self.seq_length
+# define the Hugging Face model we will use
+model_name = "t5-small"  # Utilisons un modèle T5 standard à la place
 
-    def __getitem__(self, index):
-        return (self.data[index:index+self.seq_length], 
-                self.data[index+self.seq_length])
+# Load model and tokenizer
+try:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name, device_map="auto")
+except Exception as e:
+    app.logger.error(f"Erreur de chargement du modèle ou du tokenizer: {e}")
+    raise
 
-class LSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size):
-        super(LSTM, self).__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, output_size)
+# Move model to GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
 
-    def forward(self, x):
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
-        out, _ = self.lstm(x, (h0, c0))
-        out = self.fc(out[:, -1, :])
-        return out
-# Préparation des données
-def prepare_data(token):
-    df = get_cached_binance_data(token)
-    if df is None:
-        raise ValueError("Failed to retrieve data from Binance API")
-    scaler = MinMaxScaler()
-    scaled_data = scaler.fit_transform(df[['close']].values)
-    return df, scaler, scaled_data
+# Cache pour stocker les données Binance
+binance_cache = {}
 
-# Initialisation du modèle et entraînement
-def initialize_and_train_model(scaled_data, seq_length):
-    dataset = CryptoDataset(scaled_data, seq_length)
-    train_loader = DataLoader(dataset, batch_size=32, shuffle=True)
+def get_cached_binance_data(symbol, interval='1d', limit=30):
+    cache_key = f"{symbol}_{interval}_{limit}"
+    current_time = time.time()
+    
+    if cache_key in binance_cache:
+        cached_data, timestamp = binance_cache[cache_key]
+        if current_time - timestamp < 300:  # 5 minutes cache
+            return cached_data
+    
+    data = get_binance_data(symbol, interval, limit)
+    if data is not None:
+        binance_cache[cache_key] = (data, current_time)
+    return data
 
-    input_size = 1
-    hidden_size = 64
-    num_layers = 2
-    output_size = 1
+def get_binance_data(symbol, interval='1d', limit=30):
+    base_url = "https://api.binance.com/api/v3/klines"
+    params = {
+        "symbol": f"{symbol}USDT",
+        "interval": interval,
+        "limit": limit
+    }
+    max_retries = 3
+    retry_delay = 5
 
-    model = LSTM(input_size, hidden_size, num_layers, output_size)
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(base_url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df['close'] = df['close'].astype(float)
+            return df[['timestamp', 'close']]
+        except requests.RequestException as e:
+            app.logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                app.logger.error("Max retries reached. Unable to get data from Binance API.")
+                return None
 
-    train_model(model, train_loader, criterion, optimizer, num_epochs=50)
-    return model
-
-# Sauvegarde du modèle
-def save_model(model, path='crypto_lstm_model.pth'):
-    torch.save(model.state_dict(), path)
-    app.logger.info(f"Model saved to {path}")
-
-# Chargement du modèle
-def load_model(path='crypto_lstm_model.pth'):
-    model = LSTM(1, 64, 2, 1)
-    model.load_state_dict(torch.load(path))
-    model.eval()
-    return model    
-
-def train_model(model, train_loader, criterion, optimizer, num_epochs):
-    model.train()
-    for epoch in range(num_epochs):
-        for inputs, targets in train_loader:
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
-        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
-
-def predict(model, data):
-    model.eval()
-    with torch.no_grad():
-        inputs = torch.FloatTensor(data).unsqueeze(0)
-        prediction = model(inputs)
-    return prediction.item()
-
-# Préparation des données
-df = get_cached_binance_data(token)  # Utilisez votre fonction existante
-scaler = MinMaxScaler()
-scaled_data = scaler.fit_transform(df[['close']].values)
-
-seq_length = 30  # Nombre de points de données passés à utiliser pour la prédiction
-dataset = CryptoDataset(scaled_data, seq_length)
-train_loader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-# Initialisation du modèle
-input_size = 1
-hidden_size = 64
-num_layers = 2
-output_size = 1
-
-model = LSTM(input_size, hidden_size, num_layers, output_size)
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-# Entraînement du modèle
-train_model(model, train_loader, criterion, optimizer, num_epochs=50)
-
-# Sauvegarde du modèle
-torch.save(model.state_dict(), 'crypto_lstm_model.pth')
-
-# Prédiction
 @app.route("/inference/<string:token>")
 def get_inference(token):
+    """Generate inference for given token."""
+    df = get_cached_binance_data(token)
+    if df is None:
+        return Response(json.dumps({"error": "Failed to retrieve data from Binance API"}), 
+                        status=500, 
+                        mimetype='application/json')
+
+    app.logger.info(f"Data retrieved for {token}: {df.tail(5)}")
+
+    # Prepare input for the model
+    input_data = df['close'].tolist()[-5:]  # Utilisons les 5 derniers prix
+    input_text = f"Predict the next price for {token} given the following prices: {' '.join(map(str, input_data))}"
+
     try:
-        df, scaler, scaled_data = prepare_data(token)
+        # Generate prediction
+        inputs = tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).to(device)
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_length=50)
+        prediction = tokenizer.decode(outputs[0], skip_special_tokens=True)
         
-        model_path = 'crypto_lstm_model.pth'
-        if not os.path.exists(model_path):
-            model = initialize_and_train_model(scaled_data, seq_length=30)
-            save_model(model, model_path)
-        else:
-            model = load_model(model_path)
+        # Extract the last number from the prediction
+        result = float(prediction.split()[-1])
+        
+        app.logger.info(f"Forecast for {token}: {result}")
+        return Response(str(result), status=200)
 
-        last_sequence = scaled_data[-30:]
-        prediction = predict(model, last_sequence)
-        unscaled_prediction = scaler.inverse_transform([[prediction]])[0][0]
-
-        app.logger.info(f"Forecast for {token}: {unscaled_prediction}")
-        return Response(str(unscaled_prediction), status=200)
     except Exception as e:
         app.logger.error(f"Prediction error: {str(e)}")
         return Response(json.dumps({"error": str(e)}), status=500, mimetype='application/json')
-    
-    if __name__ == '__main__':
+# run our Flask app
+if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000, debug=True)
