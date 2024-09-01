@@ -13,23 +13,22 @@
     HF_REPO_DIR: "/root/allora-huggingface-walkthrough"
     HF_REPO: "https://github.com/allora-network/allora-huggingface-walkthrough.git"
     DOCKER_COMPOSE_PATH: "/usr/local/bin/docker-compose"
+    wallet_name: "{{ input_wallet_name }}"
+    mnemonic: "{{ input_mnemonic }}"
 
-  vars_files:
-    - vars.yml
 
   vars_prompt:
   - name: model_type
     prompt: "Enter the model type (chronos, LSTM, or prophet)"
     private: false
     default: "chronos"
-  - name: wallet_name
+  - name: input_wallet_name
     prompt: "Enter your wallet name"
     private: false
-    default: "{wallet_name}"
-  - name: mnemonic
+  - name: input_mnemonic
     prompt: "Enter your wallet mnemonic"
-    private: true
-    default: "{mnemonic}"
+    private: false
+    
 
   tasks:
     - name: Update and upgrade apt packages
@@ -82,10 +81,10 @@
         repo: "{{ HF_REPO }}"
         dest: "{{ HF_REPO_DIR }}"
 
-    - name: Copy template files
-      copy:
-        src: "templates/allora-huggingface-walkthrough/{{ item }}"
-        dest: "{{ HF_REPO_DIR }}/{{ item | regex_replace('_' + model_type + '\\.py\\.j2$', '.py') }}"
+    - name: Copy and process template files
+      template:
+        src: "templates/{{ item }}"
+        dest: "{{ HF_REPO_DIR }}/{{ item | regex_replace('\\.j2$', '') }}"
       with_items:
         - "config.json.j2"
         - "Dockerfile.j2"
@@ -94,26 +93,29 @@
         - "app_{{ model_type }}.py.j2"
 
     - name: Rename model-specific app file
-      command: mv "{{ HF_REPO_DIR }}/app_{{ model_type }}.py" "{{ HF_REPO_DIR }}/app.py" 
+      command: mv "{{ HF_REPO_DIR }}/app_{{ model_type }}.py" "{{ HF_REPO_DIR }}/app.py"
 
     - name: Generate config.json file
       template:
         src: templates/config.json.j2
         dest: "{{ HF_REPO_DIR }}/config.json"
-      vars:
-        wallet_name: "{{ wallet_name }}"
-        mnemonic: "{{ mnemonic }}"
 
+        
     - name: Make init.config executable and run it for basic repo
       shell: |
         chmod +x init.config
-        ./init.config
+        ./init.config || true
       args:
         chdir: "{{ HF_REPO_DIR }}"
+      register: init_config_result
+
+    - name: Display init.config output
+      debug:
+        var: init_config_result.stdout_lines
 
     - name: Create systemd service file for Hugging Face Worker
       template:
-        src: templates/allora-worker.service.j2
+        src: templates/allora-worker-node.service.j2
         dest: /etc/systemd/system/allora-worker.service
       vars:
         hf_repo_dir: "{{ HF_REPO_DIR }}"

@@ -3,10 +3,14 @@
   hosts: localhost
   become: true
 
+  vars:
+    HF_REPO_DIR: "/root/allora-huggingface-walkthrough"
+    DOCKER_COMPOSE_PATH: "/usr/local/bin/docker-compose"
+
   tasks:
-    - name: Stop Allora Worker Node service
+    - name: Stop Allora Worker service
       ansible.builtin.systemd:
-        name: allora-worker-node
+        name: allora-worker
         state: stopped
         enabled: false
       ignore_errors: true
@@ -15,27 +19,28 @@
       ansible.builtin.wait_for:
         timeout: 30
 
-    - name: Remove Allora Worker Node service file
+    - name: Remove Allora Worker service file
       ansible.builtin.file:
-        path: /etc/systemd/system/allora-worker-node.service
+        path: /etc/systemd/system/allora-worker.service
         state: absent
       ignore_errors: true
 
-    - name: Remove Allora Worker Node data directories
+    - name: Remove Hugging Face repository
       ansible.builtin.file:
-        path: "/root/basic-coin-prediction-node"
+        path: "{{ HF_REPO_DIR }}"
         state: absent
       ignore_errors: true
 
     - name: Remove Docker containers and images
       ansible.builtin.shell: |
-        docker-compose -f /root/basic-coin-prediction-node/docker-compose.yml down
+        cd {{ HF_REPO_DIR }}
+        docker-compose down --rmi all --volumes --remove-orphans
         docker system prune -af
       ignore_errors: true
 
     - name: Remove Docker Compose binary
       ansible.builtin.file:
-        path: /usr/local/bin/docker-compose
+        path: "{{ DOCKER_COMPOSE_PATH }}"
         state: absent
       ignore_errors: true
 
