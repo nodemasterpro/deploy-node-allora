@@ -178,7 +178,7 @@ Ensure to back up all important data before deleting the Allora node, as this ac
 
 By following this guide, you have successfully deployed and managed Allora validator nodes, contributing to the robustness of the network and potentially earning rewards. Join the Allora community on Discord and Twitter to stay informed about the project.
 
-Thank you for taking the time to read this guide. If you have any questions or would like to continue the conversation, feel free to join the Allora Discord server. Stay updated and connected: Follow us on Twitter, join our Telegram group, Discord server, and subscribe to our YouTube channel.
+Thank you for taking the time to read this guide! If you have any questions or would like to continue the conversation, feel free to join the Allora Discord server. Stay updated and connected: Follow us on Twitter, join our Telegram group, Discord server, and subscribe to our YouTube channel.
 
 
 
