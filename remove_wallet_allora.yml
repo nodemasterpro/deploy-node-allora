@@ -1,0 +1,22 @@
+---
+- name: Delete Allora Wallet
+  hosts: localhost
+  become: true
+
+  vars_prompt:
+    - name: wallet_name
+      prompt: "Enter the name of the wallet to delete"
+      private: false
+
+  tasks:
+    - name: Delete wallet
+      shell: "allorad keys delete {{ wallet_name }} --keyring-backend test -y"
+      register: delete_result
+
+    - name: Display deletion result
+      debug:
+        msg: "{{ delete_result.stdout_lines }}"
+
+    - name: Confirm wallet deletion
+      debug:
+        msg: "The wallet '{{ wallet_name }}' has been successfully deleted."

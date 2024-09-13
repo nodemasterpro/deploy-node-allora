@@ -6,6 +6,7 @@
   vars:
     GO_VERSION: "1.23.0"
     ALLOCHAIN_REPO: "https://github.com/allora-network/allora-chain.git"
+    ALLORAD_VERSION: "HEAD-be9dd1ee2e6d91ce2105f6ce4470d774a8a1433e"
 
   vars_prompt:
     - name: wallet_name
@@ -38,33 +39,49 @@
           - python3-pip
         state: present
 
-    - name: Install Go
-      shell: |
-        cd $HOME && \
-        ver="{{ GO_VERSION }}" && \
-        wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz" && \
-        rm -rf /usr/local/go && \
-        tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz" && \
-        rm "go$ver.linux-amd64.tar.gz" && \
-        echo "export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin" >> $HOME/.bash_profile && \
-        source $HOME/.bash_profile && \
-        go version
-      args:
-        executable: /bin/bash
+    - name: Check Go version
+      shell: go version
+      register: go_version_check
+      ignore_errors: yes
 
-    - name: Clone Allora Chain repository
-      git:
-        repo: "{{ ALLOCHAIN_REPO }}"
-        dest: "{{ ansible_env.HOME }}/allora-chain"
-        version: "tags/v0.4.0"
-        force: yes
+    - name: Install Go if not present or version mismatch
+      block:
+        - name: Install Go
+          shell: |
+            cd $HOME && \
+            ver="{{ GO_VERSION }}" && \
+            wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz" && \
+            rm -rf /usr/local/go && \
+            tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz" && \
+            rm "go$ver.linux-amd64.tar.gz" && \
+            echo "export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin" >> $HOME/.bash_profile && \
+            source $HOME/.bash_profile && \
+            go version
+          args:
+            executable: /bin/bash
+      when: go_version_check.rc != 0 or GO_VERSION not in go_version_check.stdout
 
-    - name: Run make install for Allora Chain
-      shell: |
-        cd {{ ansible_env.HOME }}/allora-chain
-        make install
-      args:
-        executable: /bin/bash
+    - name: Check Allorad version
+      shell: allorad version
+      register: allorad_version_check
+      ignore_errors: yes
+
+    - name: Install Allorad if not present or version mismatch
+      block:
+        - name: Clone Allora Chain repository
+          git:
+            repo: "{{ ALLOCHAIN_REPO }}"
+            dest: "{{ ansible_env.HOME }}/allora-chain"
+            version: "tags/v0.4.0"
+            force: yes
+
+        - name: Run make install for Allora Chain
+          shell: |
+            cd {{ ansible_env.HOME }}/allora-chain
+            make install
+          args:
+            executable: /bin/bash
+      when: allorad_version_check.rc != 0 or ALLORAD_VERSION not in allorad_version_check.stdout
 
     - name: Ensure wallet directory exists
       ansible.builtin.file:
