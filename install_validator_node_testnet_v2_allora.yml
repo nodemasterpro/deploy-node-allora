@@ -23,8 +23,8 @@
     GO_VERSION: "1.23.0"
     ADDRBOOK_URL: "https://snapshots.polkachu.com/testnet-addrbook/allora/addrbook.json"
     ADDRBOOK_FILE: "{{ APP_HOME }}/config/addrbook.json"
-    SNAPSHOT_BASE_URL: "https://www.polkachu.com/testnets/allora/snapshots"
-    SNAPSHOT_REGEX: "allora_*.tar.lz4"
+    SNAPSHOT_BASE_URL: "https://server-3.itrocket.net/testnet/allora/"
+    #SNAPSHOT_REGEX: "allora_*.tar.lz4"
 
   tasks:
     - name: Update and upgrade apt packages
@@ -270,15 +270,18 @@
         return_content: yes
       register: snapshot_page
 
-    - name: Extract latest snapshot filename
+    - name: Extract all snapshot filenames
       set_fact:
-        snapshot_filename: "{{ snapshot_page.content | regex_findall(SNAPSHOT_REGEX) | sort | last }}"
+        all_snapshots: "{{ snapshot_page.content | regex_findall('allora_\\d{4}-\\d{2}-\\d{2}_\\d+_snap\\.tar\\.lz4') }}"
+
+    - name: Sort snapshots and get the latest
+      set_fact:
+        snapshot_filename: "{{ all_snapshots | sort | last }}"
 
     - name: Display snapshot filename
       debug:
         msg: "Downloading snapshot: {{ snapshot_filename }}"
-    
-    
+
     - name: Download snapshot
       get_url:
         url: "{{ SNAPSHOT_BASE_URL }}{{ snapshot_filename }}"
@@ -288,6 +291,7 @@
     - name: Show download result
       debug:
         var: download_result
+
 
     - name: Reset the Node
       command: allorad comet unsafe-reset-all --keep-addr-book
