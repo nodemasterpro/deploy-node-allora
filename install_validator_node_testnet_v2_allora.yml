@@ -24,6 +24,7 @@
     ADDRBOOK_URL: "https://snapshots.polkachu.com/testnet-addrbook/allora/addrbook.json"
     ADDRBOOK_FILE: "{{ APP_HOME }}/config/addrbook.json"
     SNAPSHOT_BASE_URL: "https://server-3.itrocket.net/testnet/allora/"
+    #SNAPSHOT_REGEX: "allora_*.tar.lz4"
 
   tasks:
     - name: Update and upgrade apt packages
@@ -75,6 +76,14 @@
       args:
         executable: /bin/bash
 
+    - name: Verify Go installation
+      command: /usr/local/go/bin/go version
+      register: go_version
+
+    - name: Print Go version
+      debug:
+        msg: "{{ go_version.stdout }}"
+
     - name: Clone Allora Chain repository
       git:
         repo: 'https://github.com/allora-network/allora-chain.git'
@@ -87,10 +96,22 @@
         cd {{ ansible_env.HOME }}/allora-chain
         /usr/local/go/bin/go mod tidy
         PATH=$PATH:/usr/local/go/bin make install
+        echo "export PATH=$PATH:{{ ansible_env.HOME }}/go/bin" >> {{ ansible_env.HOME }}/.bashrc
+        source {{ ansible_env.HOME }}/.bashrc
+        which allorad
       args:
         executable: /bin/bash
       environment:
         PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
+      register: make_install_output
+
+    - name: Display make install output
+      debug:
+        var: make_install_output.stdout_lines
+
+    - name: Set fact for allorad path
+      set_fact:
+        allorad_path: "{{ make_install_output.stdout_lines[-1] }}"
 
     - name: Ensure APP_HOME directory exists
       file:
@@ -103,9 +124,13 @@
 
     - name: Initialize the node
       shell: |
-        /root/go/bin/allorad --home {{ APP_HOME }} init {{ moniker }} --chain-id {{ NETWORK }} --default-denom {{ DENOM }}
+        export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+        which allorad
+        allorad --home {{ APP_HOME }} init {{ moniker }} --chain-id {{ NETWORK }} --default-denom {{ DENOM }}
       args:
         executable: /bin/bash
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
       when: not (INIT_FLAG | bool)
 
     - name: Download genesis file
@@ -116,16 +141,22 @@
 
     - name: Configure allorad client
       shell: |
-        /root/go/bin/allorad --home={{ APP_HOME }} config set client chain-id {{ NETWORK }}
+        source {{ ansible_env.HOME }}/.bashrc
+        {{ allorad_path }} --home={{ APP_HOME }} config set client chain-id {{ NETWORK }}
       args:
         executable: /bin/bash
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
       when: not (INIT_FLAG | bool)
 
     - name: Set keyring-backend for allorad client
       shell: |
-        /root/go/bin/allorad --home={{ APP_HOME }} config set client keyring-backend {{ KEYRING_BACKEND }}
+        source {{ ansible_env.HOME }}/.bashrc
+        {{ allorad_path }} --home={{ APP_HOME }} config set client keyring-backend {{ KEYRING_BACKEND }}
       args:
         executable: /bin/bash
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
       when: not (INIT_FLAG | bool)
 
     - name: Create symlink for allorad config
@@ -226,18 +257,83 @@
         enabled: true
         state: stopped
         daemon_reload: yes
+        
+  
+    - name: Get latest snapshot filename
+      uri:
+        url: "{{ SNAPSHOT_BASE_URL }}"
+        return_content: yes
+      register: snapshot_page
 
-    - name: Add PATH export to .bashrc
-      lineinfile:
-        path: /root/.bashrc
-        line: 'export PATH=$PATH:/root/go/bin'
-        create: yes
+    - name: Extract all snapshot filenames
+      set_fact:
+        all_snapshots: "{{ snapshot_page.content | regex_findall('allora_\\d{4}-\\d{2}-\\d{2}_\\d+_snap\\.tar\\.lz4') }}"
 
-    - name: Source .bashrc
-      shell: source /root/.bashrc
+    - name: Sort snapshots and get the latest
+      set_fact:
+        snapshot_filename: "{{ all_snapshots | sort | last }}"
+
+    - name: Display snapshot filename
+      debug:
+        msg: "Downloading snapshot: {{ snapshot_filename }}"
+
+    - name: Download snapshot
+      get_url:
+        url: "{{ SNAPSHOT_BASE_URL }}{{ snapshot_filename }}"
+        dest: "/root/{{ snapshot_filename }}"
+      register: download_result
+
+    - name: Show download result
+      debug:
+        var: download_result
+
+
+    - name: Reset the Node
+      command: allorad comet unsafe-reset-all --keep-addr-book
+      environment:
+          PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"    
+
+    - name: Install pv
+      apt:
+        name: pv
+        state: present           
+
+    - name: Extract the Snapshot
+      shell: |
+        pv /root/{{ snapshot_filename }} | lz4 -cd | tar -x -C {{ APP_HOME }}
       args:
         executable: /bin/bash
+      register: extract_output
 
-    - name: Display final message
-      ansible.builtin.debug:
-        msg: "Installation complete. Please log out and log back in, or run 'source ~/.bashrc' to use allorad command directly."
+    - name: Display extraction progress
+      debug:
+        msg: "{{ extract_output.stdout_lines }}"
+
+    - name: Check if priv_validator_state.json exists
+      stat:
+        path: "{{ APP_HOME }}/priv_validator_state.json"
+      register: priv_validator_state
+
+    - name: Restore priv_validator_state.json if it exists
+      copy:
+        src: "{{ APP_HOME }}/priv_validator_state.json"
+        dest: "{{ APP_HOME }}/data/priv_validator_state.json"
+        remote_src: yes
+      when: priv_validator_state.stat.exists
+
+
+    - name: Verify snapshot extraction
+      stat:
+        path: "{{ APP_HOME }}/data"
+      register: data_dir
+
+    - name: Show extraction result
+      debug:
+        msg: "Snapshot extracted successfully: {{ data_dir.stat.exists }}"    
+
+    - name: Clean Up snapshot file
+      file:
+        path: "/root/{{ snapshot_filename }}"
+        state: absent
+
+
