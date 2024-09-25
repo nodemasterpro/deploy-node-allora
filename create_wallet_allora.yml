@@ -6,7 +6,7 @@
   vars:
     GO_VERSION: "1.23.0"
     ALLOCHAIN_REPO: "https://github.com/allora-network/allora-chain.git"
-    ALLORAD_VERSION: "HEAD-be9dd1ee2e6d91ce2105f6ce4470d774a8a1433e"
+    ALLORAD_VERSION: "HEAD-c1585f96b0ba2331bd408594d37e11a767e2fae0"
 
   vars_prompt:
     - name: wallet_name
@@ -39,49 +39,54 @@
           - python3-pip
         state: present
 
-    - name: Check Go version
-      shell: go version
-      register: go_version_check
-      ignore_errors: yes
+    - name: Install Go
+      shell: |
+        cd $HOME && \
+        ver="{{ GO_VERSION }}" && \
+        wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz" && \
+        rm -rf /usr/local/go && \
+        tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz" && \
+        rm "go$ver.linux-amd64.tar.gz"
+      args:
+        executable: /bin/bash
 
-    - name: Install Go if not present or version mismatch
-      block:
-        - name: Install Go
-          shell: |
-            cd $HOME && \
-            ver="{{ GO_VERSION }}" && \
-            wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz" && \
-            rm -rf /usr/local/go && \
-            tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz" && \
-            rm "go$ver.linux-amd64.tar.gz" && \
-            echo "export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin" >> $HOME/.bash_profile && \
-            source $HOME/.bash_profile && \
-            go version
-          args:
-            executable: /bin/bash
-      when: go_version_check.rc != 0 or GO_VERSION not in go_version_check.stdout
+    - name: Update PATH permanently
+      lineinfile:
+        path: /etc/environment
+        line: 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/local/go/bin:/root/go/bin"'
+        regexp: '^PATH='
+      become: yes
 
-    - name: Check Allorad version
-      shell: allorad version
-      register: allorad_version_check
-      ignore_errors: yes
+    - name: Add /root/go/bin to PATH permanently
+      lineinfile:
+        path: /etc/profile
+        line: 'export PATH=$PATH:/root/go/bin'
+        create: yes
+      become: yes
 
-    - name: Install Allorad if not present or version mismatch
-      block:
-        - name: Clone Allora Chain repository
-          git:
-            repo: "{{ ALLOCHAIN_REPO }}"
-            dest: "{{ ansible_env.HOME }}/allora-chain"
-            version: "tags/v0.4.0"
-            force: yes
+    - name: Source /etc/environment and /etc/profile
+      shell: |
+        source /etc/environment
+        source /etc/profile
+      args:
+        executable: /bin/bash
 
-        - name: Run make install for Allora Chain
-          shell: |
-            cd {{ ansible_env.HOME }}/allora-chain
-            make install
-          args:
-            executable: /bin/bash
-      when: allorad_version_check.rc != 0 or ALLORAD_VERSION not in allorad_version_check.stdout
+    - name: Clone Allora Chain repository
+      git:
+        repo: "{{ ALLOCHAIN_REPO }}"
+        dest: "{{ ansible_env.HOME }}/allora-chain"
+        version: "tags/v0.5.0"
+        force: yes
+
+    - name: Run make install for Allora Chain
+      shell: |
+        cd {{ ansible_env.HOME }}/allora-chain
+        /usr/local/go/bin/go mod tidy
+        PATH=$PATH:/usr/local/go/bin make install
+      args:
+        executable: /bin/bash
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
 
     - name: Ensure wallet directory exists
       ansible.builtin.file:
@@ -91,10 +96,25 @@
 
     - name: Add new wallet and store output
       ansible.builtin.shell: |
-        allorad keys add {{ wallet_name }} --keyring-backend test --output json > {{ ansible_env.HOME }}/.allorad/wallets/{{ wallet_name }}.info
+        /root/go/bin/allorad keys add {{ wallet_name }} --keyring-backend test --output json > {{ ansible_env.HOME }}/.allorad/wallets/{{ wallet_name }}.info
       args:
         executable: /bin/bash
 
-    - name: Display wallet info message
+    - name: Display wallet information message
       ansible.builtin.debug:
-        msg: "Wallet created. You can find the wallet info, including and seed phrase at {{ ansible_env.HOME }}/.allorad/wallets/{{ wallet_name }}.info"
+        msg: "Wallet created. You can find the wallet information, including the recovery phrase, in {{ ansible_env.HOME }}/.allorad/wallets/{{ wallet_name }}.info"
+
+    - name: Add PATH export to .bashrc
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export PATH=$PATH:/root/go/bin'
+        create: yes
+
+    - name: Source .bashrc
+      shell: source /root/.bashrc
+      args:
+        executable: /bin/bash
+
+    - name: Display final message
+      ansible.builtin.debug:
+        msg: "Installation complete. Please log out and log back in, or run 'source ~/.bashrc' to use allorad command directly."
