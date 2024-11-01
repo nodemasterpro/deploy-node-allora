@@ -1,11 +1,14 @@
 [Unit]
-Description=Allora Node Service
-After=network.target
+Description=Allora node
+After=network-online.target
 
 [Service]
-Restart=always
-ExecStart=/root/go/bin/allorad --home={{ app_home }} start --moniker={{ moniker }} --minimum-gas-prices=0{{ denom }} --rpc.laddr=tcp://0.0.0.0:26667 --p2p.seeds={{ seeds | replace("\n", "") }} --p2p.persistent_peers={{ peers | replace("\n", "") }}
 User=root
+WorkingDirectory={{ ALLORA_HOME }}
+ExecStart=/root/go/bin/allorad start --home {{ ALLORA_HOME }}
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target

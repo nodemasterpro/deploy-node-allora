@@ -2,3 +2,4 @@ go*
 archives
 inventory_test
 templates/allora-huggingface-walkthrough
+inventory.ini
