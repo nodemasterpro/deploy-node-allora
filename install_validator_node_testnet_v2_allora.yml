@@ -1,0 +1,472 @@
+---
+- name: Deploy Allora Validator Node using Ansible
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars_prompt:
+    - name: moniker
+      prompt: "Enter your node name"
+      private: false
+
+  vars:
+    NETWORK: allora-testnet-1
+    GENESIS_URL: "https://server-3.itrocket.net/testnet/allora/genesis.json"
+    SEEDS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/seeds.txt"
+    PEERS_URL: "https://raw.githubusercontent.com/allora-network/networks/main/{{ NETWORK }}/peers.txt"
+    INIT_FLAG: "{{ ALLORA_HOME }}/.initialized"
+    KEYRING_BACKEND: "os"
+    GENESIS_FILE: "{{ ALLORA_HOME }}/config/genesis.json"
+    DENOM: uallo
+    GO_VERSION: "1.22.3"
+    ADDRBOOK_URL: "https://server-3.itrocket.net/testnet/allora/addrbook.json"
+    ADDRBOOK_FILE: "{{ ALLORA_HOME }}/config/addrbook.json"
+    SNAPSHOT_BASE_URL: "https://server-3.itrocket.net/testnet/allora/"
+    P2P_PORT: 27656
+    RPC_PORT: 27657
+    PROMETHEUS_PORT: 27660
+    ALLORA_HOME: "/root/.allorad"
+    ALLORA_CHAIN_DIR: "/root/allora-chain"
+    WALLET_BACKUP_DIR: "/root/wallets-allora-backup"
+    ALLORA_VERSION: "v0.6.0"
+    PRUNING_KEEP_RECENT: "100"
+    PRUNING_INTERVAL: "50"
+    MINIMUM_GAS_PRICE: "0uallo"
+    GRPC_WEB_PORT: "27091"
+    ETH_PORT: "27545"
+    ETH_WS_PORT: "27546"
+    PPROF_PORT: "27060"
+    PROMETHEUS_PORT: "27660"
+    SEEDS: "720d83b52611c64d119adfc4d08d2e85885d8c74@allora-testnet-seed.itrocket.net:27656"
+    PEERS: "a8cde2de31410d896668e53446495a4a68c4c24f@allora-testnet-peer.itrocket.net:27656,bb94a8d60f24e4f1ba34d99eb434f7b486f4e432@34.69.129.28:26656,7d548f78f0c67d391279c36fa9e127c52ce8b14c@65.108.225.207:55656,bc93646d79d3c56d234c4a95568b0e9b6459b746@148.113.190.60:26656,c8f7c18f98ada342100c7bade62a28a244188951@204.29.146.8:26656,d3c79122924ff477e941ec0ca1ed775cfb01ca20@66.35.84.140:26656,0f6b64fcd38872d18a78d89e090a5e6928883d52@8.209.116.116:26656,2eb9f5f80d721be2d37ab72c10a7be6aaf7897a4@15.204.101.92:26656,dd62315dda2afa9d0d5153829696e1320384a59e@15.204.101.33:26656,18fbf5f16f73e216f93304d94e8b79bf5acd7578@15.204.101.152:26656,1ec4d1954ce3631274d57a9b60f5ffb5f9e4d841@66.70.177.125:27656"
+    monitoring_enabled: true
+    backup_enabled: true
+
+
+  tasks:
+    - name: Display initial progress
+      debug:
+        msg: "Starting Allora validator node installation. Progress: 5%"
+
+    - name: Technical prerequisites analysis
+      block:
+        - name: Check for existing installation
+          stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ ALLORA_HOME }}"
+            - "{{ ALLORA_CHAIN_DIR }}"
+          register: existing_installation
+
+        - name: Stop allora service if running
+          systemd:
+            name: allora-node
+            state: stopped
+          ignore_errors: yes
+          when: existing_installation.results[0].stat.exists
+
+        - name: Backup existing configuration if present
+          block:
+            - name: Create backup directory
+              file:
+                path: "{{ WALLET_BACKUP_DIR }}"
+                state: directory
+                mode: '0700'
+
+            - name: Check if wallets directory exists
+              stat:
+                path: "{{ ALLORA_HOME }}/wallets"
+              register: wallets_dir
+
+            - name: Backup wallets if present
+              copy:
+                src: "{{ ALLORA_HOME }}/wallets"
+                dest: "{{ WALLET_BACKUP_DIR }}/"
+                remote_src: yes
+              when: wallets_dir.stat.exists
+
+            - name: Backup node key files
+              copy:
+                src: "{{ item }}"
+                dest: "{{ WALLET_BACKUP_DIR }}/"
+                remote_src: yes
+              with_items:
+                - "{{ ALLORA_HOME }}/config/node_key.json"
+                - "{{ ALLORA_HOME }}/config/priv_validator_key.json"
+                - "{{ ALLORA_HOME }}/data/priv_validator_state.json"
+              ignore_errors: yes
+
+            - name: Create backup manifest
+              copy:
+                content: "{{ ansible_date_time.iso8601 }}"
+                dest: "{{ WALLET_BACKUP_DIR }}/backup_timestamp"
+
+            - name: Display backup message
+              debug:
+                msg: "Configuration backed up to {{ WALLET_BACKUP_DIR }}"
+          when: existing_installation.results[0].stat.exists
+
+        - name: Remove existing installation
+          shell: "rm -rf {{ item }}"
+          loop:
+            - "{{ ALLORA_HOME }}"
+            - "{{ ALLORA_CHAIN_DIR }}"
+          when: existing_installation.results[0].stat.exists or existing_installation.results[1].stat.exists
+
+        - name: Display removal message
+          debug:
+            msg: "Existing installation removed. Wallets backed up to {{ WALLET_BACKUP_DIR }} if they existed."
+          when: existing_installation.results[0].stat.exists or existing_installation.results[1].stat.exists
+
+    
+    - name: Display progress after prerequisites
+      debug:
+        msg: "Progress: 15% - Prerequisites checked"
+
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: 'yes'
+
+    - name: Display progress after system update
+      debug:
+        msg: "Progress: 25% - System updated"
+
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - git
+          - jq
+          - wget
+          - build-essential
+          - gcc
+          - lz4
+        state: present
+
+    - name: Display progress after dependencies installation
+      debug:
+        msg: "Progress: 35% - Dependencies installed"
+
+    - name: Install Go
+      shell: |
+        cd $HOME && \
+        ver="{{ GO_VERSION }}" && \
+        wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz" && \
+        rm -rf /usr/local/go && \
+        tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz" && \
+        rm "go$ver.linux-amd64.tar.gz"
+      args:
+        executable: /bin/bash
+
+    - name: Display progress after Go installation
+      debug:
+        msg: "Progress: 45% - Go installed"
+
+    - name: Update PATH permanently in /etc/environment
+      lineinfile:
+        path: /etc/environment
+        line: 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/local/go/bin:/root/go/bin"'
+        regexp: '^PATH='
+      become: yes
+
+    - name: Add /root/go/bin to PATH permanently in /etc/profile
+      lineinfile:
+        path: /etc/profile
+        line: 'export PATH=$PATH:/root/go/bin'
+        create: yes
+      become: yes
+
+    - name: Source /etc/environment and /etc/profile
+      shell: |
+        source /etc/environment
+        source /etc/profile
+      args:
+        executable: /bin/bash
+
+    - name: Verify Go installation
+      command: /usr/local/go/bin/go version
+      register: go_version
+
+    - name: Print Go version
+      debug:
+        msg: "{{ go_version.stdout }}"
+
+    - name: Clone Allora Chain repository
+      git:
+        repo: 'https://github.com/allora-network/allora-chain.git'
+        dest: "{{ ansible_env.HOME }}/allora-chain"
+        version: "tags/v0.6.1"
+        force: yes
+
+    - name: Run make install
+      shell: |
+        cd {{ ansible_env.HOME }}/allora-chain
+        PATH=$PATH:/usr/local/go/bin make install
+        echo "export PATH=$PATH:{{ ansible_env.HOME }}/go/bin" >> {{ ansible_env.HOME }}/.bashrc
+        source {{ ansible_env.HOME }}/.bashrc
+        which allorad
+      args:
+        executable: /bin/bash
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
+      register: make_install_output
+
+    - name: Display make install output
+      debug:
+        var: make_install_output.stdout_lines
+
+    - name: Set fact for allorad path
+      set_fact:
+        allorad_path: "{{ make_install_output.stdout_lines[-1] }}"
+
+      
+    
+    - name: Ensure ALLORA_HOME directory exists
+      file:
+        path: "{{ ALLORA_HOME }}"
+        state: directory
+
+       
+    - name: Initialize the node
+      shell: |
+        export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+        which allorad
+        allorad --home {{ ALLORA_HOME }} init {{ moniker }} --chain-id {{ NETWORK }}
+      args:
+        executable: /bin/bash
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
+      when: not (INIT_FLAG | bool)
+
+    - name: Configure allorad client
+      shell: |
+        source {{ ansible_env.HOME }}/.bashrc
+        {{ allorad_path }} --home={{ ALLORA_HOME }} config set client chain-id {{ NETWORK }}
+      args:
+        executable: /bin/bash
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
+      when: not (INIT_FLAG | bool)
+
+    - name: Set keyring-backend for allorad client
+      shell: |
+        source {{ ansible_env.HOME }}/.bashrc
+        {{ allorad_path }} --home={{ ALLORA_HOME }} config set client keyring-backend {{ KEYRING_BACKEND }}
+      args:
+        executable: /bin/bash
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"
+      when: not (INIT_FLAG | bool)  
+
+    - name: Display progress after node initialization
+      debug:
+        msg: "Progress: 65% - Node initialized"
+      
+
+    - name: Download genesis file
+      get_url:
+        url: "{{ GENESIS_URL }}"
+        dest: "{{ GENESIS_FILE }}"
+      when: not (INIT_FLAG | bool)
+
+    
+
+    - name: Create symlink for allorad config
+      file:
+        src: "{{ ALLORA_HOME }}"
+        dest: "{{ ALLORA_HOME }}/.allorad"
+        state: link
+      when: not (INIT_FLAG | bool)
+
+    - name: Create init flag
+      file:
+        path: "{{ INIT_FLAG }}"
+        state: touch
+      when: not (INIT_FLAG | bool)
+
+    - name: Configure pruning to save storage
+      ansible.builtin.shell: |
+        sed -i \
+            -e "s/^pruning *=.*/pruning = \"custom\"/" \
+            -e "s/^pruning-keep-recent *=.*/pruning-keep-recent = \"100\"/" \
+            -e "s/^pruning-keep-every *=.*/pruning-keep-every = \"0\"/" \
+            -e "s/^pruning-interval *=.*/pruning-interval = \"50\"/" \
+            "{{ ALLORA_HOME }}/config/app.toml"
+      args:
+        executable: /bin/bash
+
+    - name: Configure indexer to null
+      ansible.builtin.shell: |
+        sed -i "s/^indexer *=.*/indexer = \"null\"/" {{ ALLORA_HOME }}/config/config.toml
+      args:
+        executable: /bin/bash
+
+    - name: Change ports in config.toml
+      ansible.builtin.shell: |
+        sed -i "s/^laddr = \"tcp:\/\/0.0.0.0:26656\"/laddr = \"tcp:\/\/0.0.0.0:{{ P2P_PORT }}\"/" {{ ALLORA_HOME }}/config/config.toml
+        sed -i "s/^laddr = \"tcp:\/\/127.0.0.1:26657\"/laddr = \"tcp:\/\/127.0.0.1:{{ RPC_PORT }}\"/" {{ ALLORA_HOME }}/config/config.toml
+        sed -i "s/^pprof_laddr = \"localhost:6060\"/pprof_laddr = \"localhost:{{ PROMETHEUS_PORT }}\"/" {{ ALLORA_HOME }}/config/config.toml
+      args:
+        executable: /bin/bash
+
+    - name: Configure seeds and peers
+      ansible.builtin.shell: |
+        sed -i -e "/^\[p2p\]/,/^\[/{s/^[[:space:]]*seeds *=.*/seeds = \"{{ SEEDS }}\"/}" \
+               -e "/^\[p2p\]/,/^\[/{s/^[[:space:]]*persistent_peers *=.*/persistent_peers = \"{{ PEERS }}\"/}" {{ ALLORA_HOME }}/config/config.toml
+      args:
+        executable: /bin/bash
+
+    - name: Change port in client.toml
+      ansible.builtin.shell: |
+        sed -i "s/^node = \"tcp:\/\/localhost:26657\"/node = \"tcp:\/\/localhost:{{ RPC_PORT }}\"/" {{ ALLORA_HOME }}/config/client.toml
+      args:
+        executable: /bin/bash
+
+    - name: Configure prometheus
+      ansible.builtin.shell: |
+        sed -i -e "s/prometheus = false/prometheus = true/" {{ ALLORA_HOME }}/config/config.toml
+
+    - name: Set external address
+      ansible.builtin.shell: |
+        external_ip=$(wget -qO- eth0.me)
+        sed -i "s/^external_address = \"\"/external_address = \"$external_ip:{{ P2P_PORT }}\"/" {{ ALLORA_HOME }}/config/config.toml
+    
+    
+    - name: Download addrbook.json
+      get_url:
+        url: "{{ ADDRBOOK_URL }}"
+        dest: "{{ ADDRBOOK_FILE }}"
+
+    - name: Create systemd service file from template
+      template:
+        src: templates/allora-validator-node.service.yml.j2
+        dest: /etc/systemd/system/allora-node.service
+
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: true
+
+    - name: Enable and start Allora Node service
+      systemd:
+        name: allora-node
+        enabled: true
+        state: stopped
+        daemon_reload: yes
+
+    - name: backup priv_validator_state.json if it exists
+      copy:
+        src: "{{ ALLORA_HOME }}/data/priv_validator_state.json"
+        dest: "{{ ALLORA_HOME }}/priv_validator_state.json"
+        remote_src: yes
+      tags: 
+        - snapshot         
+      
+    - name: Install aria2
+      apt:
+        name: aria2
+        state: present
+      become: yes
+
+    - name: Get latest snapshot filename
+      uri:
+        url: "{{ SNAPSHOT_BASE_URL }}"
+        return_content: yes
+      register: snapshot_page
+      tags: 
+        - snapshot
+
+    - name: Extract all snapshot filenames
+      set_fact:
+        all_snapshots: "{{ snapshot_page.content | regex_findall('allora_\\d{4}-\\d{2}-\\d{2}_\\d+_snap\\.tar\\.lz4') }}"
+      tags: 
+        - snapshot  
+
+    - name: Sort snapshots and get the latest
+      set_fact:
+        snapshot_filename: "{{ all_snapshots | sort | last }}"
+      tags: 
+        - snapshot  
+
+    - name: Display snapshot filename
+      debug:
+        msg: "Downloading snapshot: {{ snapshot_filename }}"
+      tags: 
+        - snapshot  
+
+    - name: Download snapshot from local HTTP server using aria2c
+      shell: |
+        aria2c -x 16 -s 16 {{ SNAPSHOT_BASE_URL }}{{ snapshot_filename }} -d /root/
+      args:
+        executable: /bin/bash
+      register: download_result  
+      tags:
+        - snapshot     
+    
+
+    - name: Show download result
+      debug:
+        msg: "Download completed: {{ download_result.rc == 0 }}"
+      tags: 
+        - snapshot
+
+    - name: Display progress after snapshot download
+      debug:
+        msg: "Progress: 65% - Snapshots downloaded"
+
+    - name: Reset the Node
+      command: allorad comet unsafe-reset-all --keep-addr-book
+      environment:
+          PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:{{ ansible_env.HOME }}/go/bin"    
+      tags: 
+        - snapshot      
+    
+    - name: Extract the Snapshot
+      shell: |
+        lz4 -cd "/root/{{ snapshot_filename }}" | tar -xf - -C {{ ALLORA_HOME }}
+      args:
+        executable: /bin/bash
+      register: extract_output
+      tags: 
+        - snapshot  
+
+    - name: Display progress after snapshot extraction
+      debug:
+        msg: "Progress: 75% - Snapshots extracted"
+    
+    
+    - name: Check if priv_validator_state.json exists
+      stat:
+        path: "{{ ALLORA_HOME }}/priv_validator_state.json"
+      register: priv_validator_state
+      tags: 
+        - snapshot  
+
+    - name: Restore priv_validator_state.json if it exists
+      copy:
+        src: "{{ ALLORA_HOME }}/priv_validator_state.json"
+        dest: "{{ ALLORA_HOME }}/data/priv_validator_state.json"
+        remote_src: yes
+      when: priv_validator_state.stat.exists
+      tags: 
+        - snapshot  
+  
+
+    - name: Start allora-node service
+      systemd:
+        name: allora-node
+        state: started       
+    
+    - name: Display final progress
+      debug:
+        msg: "Progress: 100% - Allora validator node installation completed"
+        
+
+    
+
+
+
+
+
+
