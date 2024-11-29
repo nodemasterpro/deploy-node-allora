@@ -152,7 +152,7 @@
       shell: |
         cd $HOME && \
         ver="{{ GO_VERSION }}" && \
-        wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz" && \
+        wget "https://go.dev/dl/go$ver.linux-amd64.tar.gz" && \
         rm -rf /usr/local/go && \
         tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz" && \
         rm "go$ver.linux-amd64.tar.gz"
