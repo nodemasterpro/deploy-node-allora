@@ -196,7 +196,7 @@
       git:
         repo: 'https://github.com/allora-network/allora-chain.git'
         dest: "{{ ansible_env.HOME }}/allora-chain"
-        version: "tags/v0.6.1"
+        version: "tags/v0.6.6"
         force: yes
 
     - name: Run make install
