@@ -28,7 +28,7 @@
     ALLORA_HOME: "/root/.allorad"
     ALLORA_CHAIN_DIR: "/root/allora-chain"
     WALLET_BACKUP_DIR: "/root/wallets-allora-backup"
-    ALLORA_VERSION: "v0.6.0"
+    ALLORA_VERSION: "v0.6.6"
     PRUNING_KEEP_RECENT: "100"
     PRUNING_INTERVAL: "50"
     MINIMUM_GAS_PRICE: "0uallo"
