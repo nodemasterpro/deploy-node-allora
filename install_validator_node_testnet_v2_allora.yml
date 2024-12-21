@@ -28,7 +28,7 @@
     ALLORA_HOME: "/root/.allorad"
     ALLORA_CHAIN_DIR: "/root/allora-chain"
     WALLET_BACKUP_DIR: "/root/wallets-allora-backup"
-    ALLORA_VERSION: "v0.6.6"
+    ALLORA_VERSION: "v0.8.0"
     PRUNING_KEEP_RECENT: "100"
     PRUNING_INTERVAL: "50"
     MINIMUM_GAS_PRICE: "0uallo"
@@ -196,7 +196,7 @@
       git:
         repo: 'https://github.com/allora-network/allora-chain.git'
         dest: "{{ ansible_env.HOME }}/allora-chain"
-        version: "tags/v0.6.6"
+        version: "tags/v0.8.0"
         force: yes
 
     - name: Run make install
