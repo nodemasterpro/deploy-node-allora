@@ -6,7 +6,7 @@
 
   vars:
     allora_version: "v0.8.0"
-    allora_binary_url: "https://github.com/allora-network/allora-chain/releases/download/{{ allora_version }}/allora-chain_{{ allora_version | replace('v', '') }}_linux_amd64"
+    allora_binary_url: "https://github.com/allora-network/allora-chain/releases/download/{{ allora_version }}/allorad_linux_amd64"
     home_dir: "/root"
 
   tasks:
